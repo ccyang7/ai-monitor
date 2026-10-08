@@ -1,0 +1,9 @@
+[project]
+name = "ai-monitor-backend"
+version = "0.1.0"
+description = "AI Monitor 后端服务"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.143.0",
+    "uvicorn[standard]>=0.54.0",
+]

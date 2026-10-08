@@ -1,0 +1,40 @@
+# ============================================================
+# AI Monitor — 换行符与文件类型处理
+# ============================================================
+# 解决的问题：Windows 用 CRLF 换行，Linux/Mac 用 LF。
+# 如果不统一，会出现：
+#   1. 每次提交都显示"整个文件被修改"（其实只改了换行符）
+#   2. 阶段 13 做 Docker 时，容器（Linux）里的脚本报
+#      `bad interpreter: /bin/sh^M`
+#
+# 策略：仓库里统一存 LF，检出时自适应。
+# ============================================================
+
+# 所有文本文件：自动识别，仓库内统一为 LF
+* text=auto eol=lf
+
+# ---------- 二进制文件：不做任何换行符转换 ----------
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary
+*.zip binary
+
+# ---------- Windows 专有文件：必须保持 CRLF ----------
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# ---------- 语言标记（让 GitHub 正确统计） ----------
+*.py   text diff=python
+*.md   text
+*.json text
+*.toml text
+*.yml  text
+*.yaml text
