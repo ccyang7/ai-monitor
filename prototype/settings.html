@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目设置 · AI知识问答 · AI Monitor</title>
+<link rel="stylesheet" href="common.css">
+<style>
+/* 项目设置页专属样式：项目信息表单 + API Key 管理 + 危险区域。
+   这一页最重要的是把"Key 明文只出现一次"讲清楚。 */
+
+.settings-grid { display: flex; flex-direction: column; gap: var(--gutter); }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.form-grid .span-2 { grid-column: 1 / -1; }
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #F1F5F3;
+}
+
+/* --- API Key 列表 --- */
+
+.keys { display: flex; flex-direction: column; gap: 12px; margin-top: 18px; }
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 17px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+}
+
+.key-row.is-revoked { opacity: .55; }
+
+.key-main { flex: 1; min-width: 0; }
+
+.key-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: .01em;
+  margin-bottom: 4px;
+}
+
+.key-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--faint);
+  font-size: var(--fs-xs);
+}
+
+/* 明文只显示一次 —— 这个提示条要够醒目 */
+.key-reveal {
+  margin-top: 18px;
+  padding: 18px 20px;
+  border-radius: var(--r-md);
+  background: var(--amber-bg);
+  border: 1px solid #F3DFB8;
+}
+
+.key-reveal-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-base);
+  font-weight: 660;
+  color: #8A5710;
+  margin-bottom: 12px;
+}
+
+.key-reveal-head svg { width: 18px; height: 18px; flex: none; }
+
+.key-reveal-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  border: 1px solid #F3DFB8;
+}
+
+.key-reveal-value code {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.key-reveal-hint {
+  margin-top: 11px;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: #8A5710;
+}
+
+/* --- 危险区域 --- */
+
+.danger {
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border: 1px solid #F2D9D6;
+  padding: 20px 22px;
+}
+
+.danger-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  color: var(--red);
+  margin-bottom: 6px;
+}
+
+.danger-title svg { width: 17px; height: 17px; flex: none; }
+
+.danger-desc {
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  color: var(--muted);
+  margin-bottom: 16px;
+  max-width: 62ch;
+}
+
+.btn-danger {
+  background: var(--card);
+  color: var(--red);
+  box-shadow: inset 0 0 0 1px #E8C4C0;
+}
+
+.btn-danger:hover { background: var(--red-bg); }
+
+
+@media (max-width: 820px) {
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+  .key-row { flex-direction: column; align-items: stretch; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h3.5l2.5-6 4 13 2.5-7h7.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">AI Monitor</div>
+        <div class="brand-sub">大模型使用监控</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="home.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1.6"/>
+          <rect x="14" y="3" width="7" height="5" rx="1.6"/>
+          <rect x="14" y="12" width="7" height="9" rx="1.6"/>
+          <rect x="3" y="16" width="7" height="5" rx="1.6"/>
+        </svg>
+        <span>首页</span>
+      </a>
+      <a class="nav-item" href="models.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M4 12h16M4 17h9"/>
+        </svg>
+        <span>模型管理</span>
+      </a>
+      <a class="nav-item" href="chat.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4 3.5V6a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 6z"/>
+        </svg>
+        <span>AI 助手</span>
+      </a>
+
+      <div class="nav-label">我的项目</div>
+      <a class="nav-item is-active" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>AI知识问答</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>客服话术生成</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#D98E2B"></span>
+        <span>合同条款审查</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <div class="avatar">开</div>
+        <div>
+          <div class="user-chip-name">开发者</div>
+          <div class="user-chip-role">3 / 3 个项目</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 主内容区 ============ -->
+  <main class="main">
+
+    <header class="page-head">
+      <div>
+        <a class="crumb" href="home.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+          我的项目
+        </a>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <h1 class="page-title">AI知识问答</h1>
+          <span class="tag is-mute">Python</span>
+          <span class="tag is-mute">DeepSeek</span>
+          <span class="tag"><span class="dot"></span>正常</span>
+        </div>
+      </div>
+      <span class="live">
+        <span class="dot"></span>
+        实时接收上报
+      </span>
+    </header>
+
+    <nav class="tabs">
+      <a class="tab" href="project-overview.html">概览</a>
+      <a class="tab" href="logs.html">调用日志</a>
+      <a class="tab" href="tokens.html">Token</a>
+      <a class="tab" href="costs.html">成本</a>
+      <a class="tab" href="anomalies.html">异常<span class="tab-count">2</span></a>
+      <a class="tab is-on" href="settings.html">设置</a>
+    </nav>
+
+    <div class="settings-grid">
+
+      <!-- ============ 项目信息 ============ -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">项目信息</h2>
+            <p class="card-hint">这些信息只影响展示，不影响数据接入</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field span-2">
+            <label class="field-label" for="pname">项目名称</label>
+            <input class="input" id="pname" type="text" value="AI知识问答">
+            <span class="field-hint">同一个账号下项目名不能重复</span>
+          </div>
+
+          <div class="field span-2">
+            <label class="field-label" for="pdesc">项目描述</label>
+            <textarea class="textarea" id="pdesc" rows="2">微信小程序端的知识问答应用，基于 LangChain</textarea>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="pstack">技术栈</label>
+            <select class="input" id="pstack">
+              <option>Python</option>
+              <option>Java</option>
+              <option>Node.js</option>
+              <option>其他</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="pmodel">主要使用的模型</label>
+            <input class="input" id="pmodel" type="text" value="deepseek-chat">
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" type="button">保存修改</button>
+          <button class="btn btn-ghost" type="button">取消</button>
+        </div>
+      </section>
+
+      <!-- ============ API Key ============ -->
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">API Key</h2>
+            <p class="card-hint">接入方用这个 Key 上报调用数据</p>
+          </div>
+          <button class="btn btn-primary btn-sm" type="button">新建 Key</button>
+        </div>
+
+        <!-- 新建之后的一次性提示 -->
+        <div class="key-reveal">
+          <div class="key-reveal-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3.5 2.6 20h18.8z"/><path d="M12 10v4M12 17.2h.01"/>
+            </svg>
+            这是唯一一次显示完整 Key
+          </div>
+          <div class="key-reveal-value">
+            <code>proj_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0</code>
+            <button class="btn btn-ghost btn-sm" type="button">复制</button>
+          </div>
+          <p class="key-reveal-hint">
+            关掉这个提示后就再也看不到了 —— 服务端只存了它的哈希，我们自己也没法还原。
+            丢了就重新生成一个。
+          </p>
+        </div>
+
+        <div class="keys">
+
+          <div class="key-row">
+            <div class="key-main">
+              <div class="key-value">proj_a1b2c3d4e5f6…</div>
+              <div class="key-meta">
+                <span>创建于 2026-10-01</span>
+                <span>最后使用 3 分钟前</span>
+              </div>
+            </div>
+            <span class="tag"><span class="dot"></span>使用中</span>
+            <button class="btn btn-ghost btn-sm" type="button">吊销</button>
+          </div>
+
+          <div class="key-row is-revoked">
+            <div class="key-main">
+              <div class="key-value">proj_z9y8x7w6v5u4…</div>
+              <div class="key-meta">
+                <span>创建于 2026-09-12</span>
+                <span>吊销于 2026-10-01</span>
+              </div>
+            </div>
+            <span class="tag is-mute">已吊销</span>
+            <button class="btn btn-ghost btn-sm" type="button" disabled>吊销</button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ============ 危险区域 ============ -->
+      <section class="danger">
+        <h2 class="danger-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3.5 2.6 20h18.8z"/><path d="M12 10v4M12 17.2h.01"/>
+          </svg>
+          删除项目
+        </h2>
+        <p class="danger-desc">
+          删除后，这个项目的所有调用记录、统计数据、API Key 都会被一并删除，无法恢复。
+          已经接入的项目会立刻停止上报。
+        </p>
+        <button class="btn btn-danger" type="button">删除这个项目</button>
+      </section>
+
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

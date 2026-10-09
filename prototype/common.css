@@ -1,0 +1,834 @@
+/* AI Monitor 原型 —— 共享样式
+ *
+ * 这个文件是所有原型页面的地基：设计令牌（颜色/字号/圆角）+ 布局骨架 + 通用组件。
+ * 三个页面共用它，改一处全局生效。
+ *
+ * 配色沿用《风格参考.png》的深绿体系，层次做了区分：
+ *   侧边栏最沉 → 统计卡片次之 → 页面背景最浅。
+ */
+
+
+/* ============================================================
+   1. 设计令牌
+   ============================================================ */
+
+:root {
+  /* 绿色主体系：900 最深 → 50 最浅 */
+  --green-900: #0B231C;
+  --green-800: #12362A;   /* 侧边栏 */
+  --green-700: #1B4332;   /* 统计卡片起 */
+  --green-600: #24563F;   /* 统计卡片止 */
+  --green-500: #40916C;   /* 主色：按钮、图表主线 */
+  --green-400: #52B788;   /* 亮绿：图表次线、高亮 */
+  --green-300: #74C69D;
+  --green-200: #B7E4C7;
+  --green-100: #D8F3DC;   /* 标签底、侧边栏选中态 */
+  --green-50:  #EBF7EF;
+
+  /* 中性色 */
+  --ink:   #0F2A22;       /* 标题 */
+  --text:  #2C3E37;       /* 正文 */
+  --muted: #6B7F76;       /* 次要文字 */
+  --faint: #9AA9A2;       /* 更次要：单位、时间戳 */
+  --line:  #E3EAE6;       /* 分隔线 */
+  --paper: #F4F7F5;       /* 页面背景（带绿调，不是纯灰） */
+  --card:  #FFFFFF;
+
+  /* 语义色 */
+  --amber:    #D98E2B;
+  --amber-bg: #FDF4E5;
+  --red:      #C4453C;
+  --red-bg:   #FBEEEC;
+
+  /* 字号 */
+  --fs-xs:   12px;
+  --fs-sm:   13px;
+  --fs-base: 14px;
+  --fs-md:   15px;
+  --fs-lg:   18px;
+  --fs-xl:   22px;
+  --fs-2xl:  28px;
+  --fs-3xl:  34px;
+
+  /* 圆角 */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+
+  /* 阴影：只保留一种，避免"每个卡片一套阴影"的模板感 */
+  --shadow: 0 1px 2px rgba(11, 35, 28, .04), 0 4px 14px rgba(11, 35, 28, .05);
+
+  /* 布局 */
+  --sidebar-w: 232px;
+  --gutter: 16px;
+}
+
+
+/* ============================================================
+   2. 基础重置
+   ============================================================ */
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+               "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 数字统一等宽对齐 —— 表格和卡片里的数字要能上下对齐 */
+.num,
+.stat-value,
+td.num,
+th.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+h1, h2, h3, h4 { margin: 0; color: var(--ink); font-weight: 600; }
+p { margin: 0; }
+a { color: inherit; text-decoration: none; }
+ul { margin: 0; padding: 0; list-style: none; }
+
+/* 键盘焦点可见 —— 无鼠标操作时也能看清当前位置 */
+:focus-visible {
+  outline: 2px solid var(--green-500);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+
+/* ============================================================
+   3. 布局骨架：侧边栏 + 主内容区
+   ============================================================ */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  gap: var(--gutter);
+  padding: var(--gutter);
+  min-height: 100vh;
+  align-items: start;
+}
+
+/* --- 侧边栏：浮起的深色圆角块 --- */
+
+.sidebar {
+  position: sticky;
+  top: var(--gutter);
+  height: calc(100vh - var(--gutter) * 2);
+  display: flex;
+  flex-direction: column;
+  background: var(--green-800);
+  border-radius: var(--r-xl);
+  padding: 22px 14px 16px;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 8px 22px;
+}
+
+.brand-mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--green-400);
+  color: var(--green-900);
+}
+
+.brand-mark svg { width: 20px; height: 20px; }
+
+.brand-name {
+  color: #fff;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.25;
+}
+
+.brand-sub {
+  color: rgba(255, 255, 255, .45);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+/* 侧边栏导航 */
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  color: rgba(255, 255, 255, .72);
+  font-size: var(--fs-base);
+  transition: background .15s ease, color .15s ease;
+}
+
+.nav-item svg { width: 17px; height: 17px; flex: none; opacity: .85; }
+
+.nav-item:hover { background: rgba(255, 255, 255, .07); color: #fff; }
+
+.nav-item.is-active {
+  background: var(--green-100);
+  color: var(--green-800);
+  font-weight: 600;
+}
+
+.nav-item.is-active svg { opacity: 1; }
+
+/* 侧边栏里的分组小标题 */
+.nav-label {
+  padding: 18px 10px 7px;
+  color: rgba(255, 255, 255, .34);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+
+/* 侧边栏底部：用户信息 */
+.sidebar-foot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .06);
+}
+
+.avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-500);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.user-chip-name { color: #fff; font-size: var(--fs-sm); font-weight: 600; line-height: 1.3; }
+.user-chip-role { color: rgba(255, 255, 255, .45); font-size: 11px; line-height: 1.3; }
+
+
+/* --- 主内容区 --- */
+
+.main {
+  min-width: 0;          /* 防止内部表格/图表撑破网格 */
+  padding-bottom: 24px;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 4px 20px;
+}
+
+.page-title { font-size: var(--fs-xl); font-weight: 680; letter-spacing: -.01em; }
+
+.page-sub { color: var(--muted); font-size: var(--fs-base); margin-top: 3px; }
+
+/* 顶栏右侧的实时状态胶囊 —— 参考图右上角那个标签的落地。
+   首页和内页统一用它，位置固定在 page-head 右侧，
+   让每个页面都回答同一个问题："数据是活的吗"。 */
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  background: var(--green-50);
+  color: var(--green-600);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 呼吸的小绿点：暗示"数据在流动"，静止的圆点读不出这层意思 */
+.live .dot { animation: pulse 2.4s ease-in-out infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .35; }
+}
+
+/* 顶栏右侧的操作区：状态胶囊和按钮并排时用 */
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+/* 面包屑：从项目内页返回首页用 */
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  margin-bottom: 9px;
+}
+
+.crumb:hover { color: var(--green-500); }
+.crumb svg { width: 14px; height: 14px; }
+
+
+/* ============================================================
+   4. 通用组件
+   ============================================================ */
+
+/* --- 卡片 --- */
+
+.card {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.card-title { font-size: var(--fs-md); font-weight: 640; }
+
+.card-hint { color: var(--faint); font-size: var(--fs-sm); margin-top: 2px; }
+
+
+/* --- 简报条：本设计的核心元素 ---
+   需求文档 8.2「先结论，后数据」的落地。
+   刻意不做成卡片 —— 用左侧色条 + 更大的字号，在满屏卡片里跳出来。 */
+
+.brief {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 18px 22px 18px 20px;
+  margin-bottom: var(--gutter);
+  overflow: hidden;
+}
+
+/* 左侧色条：正常绿 / 有异常时换成警示色 */
+.brief::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--green-500);
+}
+
+.brief.is-alert::before { background: var(--amber); }
+
+.brief-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-50);
+  color: var(--green-500);
+  margin-top: 1px;
+}
+
+.brief.is-alert .brief-icon { background: var(--amber-bg); color: var(--amber); }
+
+.brief-icon svg { width: 17px; height: 17px; }
+
+.brief-text {
+  font-size: var(--fs-md);
+  line-height: 1.7;
+  color: var(--text);
+}
+
+/* 简报里的关键数字：加重但不换色 */
+.brief-text strong { color: var(--ink); font-weight: 660; }
+
+.brief-text .up   { color: var(--amber); font-weight: 640; }
+.brief-text .down { color: var(--green-500); font-weight: 640; }
+
+.brief-time { color: var(--faint); font-size: var(--fs-xs); margin-top: 3px; }
+
+/* 简报条里的异常出口 —— 需求 03 §2.3「点击后进入异常日志列表」。
+   有异常时结论末尾挂一个入口；用下划线 + 箭头，让它在一段陈述文字里
+   明确读得出"这里能点"，而不是靠颜色暗示。 */
+
+.brief-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  color: #A96A15;
+  font-weight: 640;
+  border-bottom: 1px solid currentColor;
+  transition: color .15s ease;
+}
+
+.brief-link:hover { color: var(--amber); }
+.brief-link svg { width: 13px; height: 13px; }
+
+
+/* --- 统计卡片：深绿填充，只在项目概览页使用 --- */
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gutter);
+  margin-bottom: var(--gutter);
+}
+
+.stat {
+  position: relative;
+  border-radius: var(--r-lg);
+  padding: 18px 20px 17px;
+  background: linear-gradient(155deg, var(--green-700), var(--green-600));
+  color: #fff;
+  overflow: hidden;
+}
+
+/* 卡片头：名称在左，状态胶囊在右。
+   胶囊是参考图里每张深色卡片右上角都挂着的那个词（normal / high）——
+   它回答"这个数正常吗"，省得用户自己拿环比去猜。 */
+
+.stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stat-name {
+  font-size: var(--fs-sm);
+  color: rgba(255, 255, 255, .68);
+}
+
+/* 深绿底上用白色半透明，不用浅绿底 —— 后者会和卡片的渐变打架 */
+.stat-chip {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, .13);
+  color: var(--green-200);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.7;
+}
+
+.stat-chip.is-warn { background: rgba(255, 216, 163, .16); color: #FFD8A3; }
+.stat-chip.is-bad  { background: rgba(255, 178, 168, .18); color: #FFB4AC; }
+
+.stat-value {
+  font-size: var(--fs-3xl);
+  font-weight: 680;
+  line-height: 1;
+  letter-spacing: -.02em;
+}
+
+.stat-unit {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: rgba(255, 255, 255, .6);
+  margin-left: 5px;
+}
+
+.stat-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 13px;
+  font-size: var(--fs-xs);
+  color: rgba(255, 255, 255, .55);
+}
+
+.stat-delta { font-weight: 600; }
+.stat-delta.up   { color: #FFD8A3; }   /* 深绿底上的暖色，不用纯红 */
+.stat-delta.down { color: var(--green-200); }
+
+
+/* --- 时间范围切换 --- */
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: #F0F4F1;
+}
+
+.seg-btn {
+  border: 0;
+  padding: 5px 13px;
+  border-radius: 7px;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.seg-btn:hover { color: var(--green-600); }
+
+.seg-btn.is-on {
+  background: var(--card);
+  color: var(--green-700);
+  box-shadow: 0 1px 2px rgba(11, 35, 28, .08);
+}
+
+
+/* --- 浅色统计卡片 ---
+   用在 Token / 成本这类分析页。概览页用的是深绿卡片（.stat），
+   这里换成浅色，免得每个页面长得一模一样。 */
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gutter);
+  margin-bottom: var(--gutter);
+}
+
+.kpi {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 17px 19px 16px;
+}
+
+.kpi-name { color: var(--muted); font-size: var(--fs-sm); }
+
+.kpi-value {
+  font-size: var(--fs-2xl);
+  font-weight: 680;
+  color: var(--ink);
+  letter-spacing: -.02em;
+  line-height: 1.2;
+  margin: 7px 0 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-value small {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--faint);
+  margin-left: 4px;
+}
+
+.kpi-foot { color: var(--faint); font-size: var(--fs-xs); }
+
+
+/* --- 水平占比条 ---
+   比饼图好读：长度直接可比，标签不用绕圈找。 */
+
+.bar {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: #EEF3F0;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--green-500);
+}
+
+.bar-fill.is-dim { background: var(--green-300); }
+
+
+/* --- 图表图例 --- */
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+
+/* --- 提示条 ---
+   用来讲一句"用户不知道但很重要"的话，比如成本口径、基线定义。 */
+
+.note {
+  display: flex;
+  gap: 12px;
+  padding: 15px 18px;
+  border-radius: var(--r-lg);
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.note svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--green-500);
+  margin-top: 2px;
+}
+
+.note b { color: var(--ink); font-weight: 650; }
+
+
+/* --- 状态标签 --- */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  background: var(--green-50);
+  color: var(--green-600);
+}
+
+.tag.is-warn { background: var(--amber-bg); color: #A96A15; }
+.tag.is-bad  { background: var(--red-bg);   color: var(--red); }
+.tag.is-mute { background: #F0F2F1;         color: var(--muted); }
+
+/* 小圆点：状态指示 */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+
+/* --- 按钮 --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+
+.btn svg { width: 16px; height: 16px; }
+
+.btn-primary { background: var(--green-500); color: #fff; }
+.btn-primary:hover { background: var(--green-600); }
+
+.btn-ghost {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.btn-ghost:hover { background: var(--green-50); box-shadow: inset 0 0 0 1px var(--green-200); }
+
+.btn-sm { padding: 6px 12px; font-size: var(--fs-sm); }
+
+
+/* --- 表单 --- */
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+
+.field-label { font-size: var(--fs-sm); font-weight: 600; color: var(--ink); }
+
+.field-hint { font-size: var(--fs-xs); color: var(--faint); }
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  color: var(--text);
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.input::placeholder { color: var(--faint); }
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--green-400);
+  box-shadow: 0 0 0 3px var(--green-50);
+}
+
+
+/* --- 项目内的分页签 ---
+   进入某个项目后，各子页面靠这条导航切换（需求 09 验收标准里要求的分页签导航）。 */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--gutter);
+  overflow-x: auto;
+}
+
+.tab {
+  flex: none;
+  padding: 10px 15px;
+  color: var(--muted);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s ease, border-color .15s ease;
+}
+
+.tab:hover { color: var(--green-600); }
+
+.tab.is-on {
+  color: var(--green-700);
+  border-bottom-color: var(--green-500);
+}
+
+/* 标签上的小计数，用于"异常 3"这类提示 */
+.tab-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--amber-bg);
+  color: #A96A15;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+
+/* --- 表格 --- */
+
+.table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 14px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #F1F5F3;
+  color: var(--text);
+}
+
+.table tbody tr:last-child td { border-bottom: 0; }
+
+.table tbody tr:hover td { background: var(--green-50); }
+
+.table .num { text-align: right; color: var(--ink); font-weight: 560; }
+
+.table th.num { text-align: right; font-weight: 600; }
+
+
+/* --- 空状态 --- */
+
+.empty {
+  text-align: center;
+  padding: 46px 20px;
+  color: var(--muted);
+}
+
+.empty-icon {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-50);
+  color: var(--green-400);
+}
+
+.empty-icon svg { width: 20px; height: 20px; }
+
+.empty-title { color: var(--ink); font-weight: 600; margin-bottom: 4px; }
+.empty-hint { font-size: var(--fs-sm); }
+
+
+/* ============================================================
+   5. 响应式
+   ============================================================ */
+
+@media (max-width: 1180px) {
+  .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  :root { --sidebar-w: 200px; }
+  .stat-row { grid-template-columns: minmax(0, 1fr); }
+  .page-head { flex-direction: column; gap: 14px; }
+}

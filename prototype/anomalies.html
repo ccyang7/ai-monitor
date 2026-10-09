@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>异常分析 · AI知识问答 · AI Monitor</title>
+<link rel="stylesheet" href="common.css">
+<style>
+/* 异常分析页专属样式。
+   异常用卡片流而不是表格 —— 每条要讲清"实际值 vs 基线 vs 倍数"，
+   塞进表格会挤成一团。 */
+
+/* 基线说明：这个概念不解释清楚，用户看不懂下面在说什么 */
+.baseline-note {
+  display: flex;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  color: var(--muted);
+  margin-bottom: var(--gutter);
+}
+
+.baseline-note svg { width: 17px; height: 17px; flex: none; color: var(--green-500); margin-top: 2px; }
+
+.baseline-note b { color: var(--ink); font-weight: 640; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: var(--gutter);
+}
+
+.toolbar-note { color: var(--muted); font-size: var(--fs-sm); }
+
+/* --- 异常条目 --- */
+
+.anomalies { display: flex; flex-direction: column; gap: 12px; }
+
+.anomaly {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 17px 20px;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border-left: 4px solid var(--amber);
+}
+
+/* 错误率异常用红色区分 —— 它比 Token 突增更值得立刻处理 */
+.anomaly.is-bad { border-left-color: var(--red); }
+
+.anomaly-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.anomaly.is-bad .anomaly-icon { background: var(--red-bg); color: var(--red); }
+
+.anomaly-icon svg { width: 19px; height: 19px; }
+
+.anomaly-body { flex: 1; min-width: 0; }
+
+.anomaly-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+
+.anomaly-type { font-size: var(--fs-md); font-weight: 650; color: var(--ink); }
+
+.anomaly-when { color: var(--faint); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+
+.anomaly-desc { font-size: var(--fs-sm); color: var(--muted); line-height: 1.7; }
+
+.anomaly-desc b { color: var(--ink); font-weight: 660; font-variant-numeric: tabular-nums; }
+
+.anomaly-desc b.is-warn { color: #A96A15; }
+.anomaly-desc b.is-bad  { color: var(--red); }
+
+.anomaly-go { flex: none; }
+
+/* --- 样本不足 ---
+   这个状态必须和"没有异常"长得不一样。
+   没有异常是确定的、安静的；样本不足是"我们不知道"——
+   所以它用虚线框 + 纯灰调，一个绿色都不许出现，也不给任何结论。 */
+
+.low-sample {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--line);
+  background: #FAFBFB;
+  margin-top: 14px;
+}
+
+.low-sample-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #F0F2F1;
+  color: var(--faint);
+}
+
+.low-sample-icon svg { width: 17px; height: 17px; }
+
+.low-sample-body { flex: 1; min-width: 0; }
+
+.low-sample-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.low-sample-model { font-size: var(--fs-base); font-weight: 650; color: var(--ink); }
+
+.low-sample-when {
+  color: var(--faint);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.low-sample-desc { font-size: var(--fs-sm); color: var(--muted); line-height: 1.7; }
+
+.low-sample-desc b { color: var(--ink); font-weight: 660; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h3.5l2.5-6 4 13 2.5-7h7.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">AI Monitor</div>
+        <div class="brand-sub">大模型使用监控</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="home.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1.6"/>
+          <rect x="14" y="3" width="7" height="5" rx="1.6"/>
+          <rect x="14" y="12" width="7" height="9" rx="1.6"/>
+          <rect x="3" y="16" width="7" height="5" rx="1.6"/>
+        </svg>
+        <span>首页</span>
+      </a>
+      <a class="nav-item" href="models.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M4 12h16M4 17h9"/>
+        </svg>
+        <span>模型管理</span>
+      </a>
+      <a class="nav-item" href="chat.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4 3.5V6a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 6z"/>
+        </svg>
+        <span>AI 助手</span>
+      </a>
+
+      <div class="nav-label">我的项目</div>
+      <a class="nav-item is-active" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>AI知识问答</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>客服话术生成</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#D98E2B"></span>
+        <span>合同条款审查</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <div class="avatar">开</div>
+        <div>
+          <div class="user-chip-name">开发者</div>
+          <div class="user-chip-role">3 / 3 个项目</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 主内容区 ============ -->
+  <main class="main">
+
+    <header class="page-head">
+      <div>
+        <a class="crumb" href="home.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+          我的项目
+        </a>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <h1 class="page-title">AI知识问答</h1>
+          <span class="tag is-mute">Python</span>
+          <span class="tag is-mute">DeepSeek</span>
+          <span class="tag"><span class="dot"></span>正常</span>
+        </div>
+      </div>
+      <span class="live">
+        <span class="dot"></span>
+        实时接收上报
+      </span>
+    </header>
+
+    <nav class="tabs">
+      <a class="tab" href="project-overview.html">概览</a>
+      <a class="tab" href="logs.html">调用日志</a>
+      <a class="tab" href="tokens.html">Token</a>
+      <a class="tab" href="costs.html">成本</a>
+      <a class="tab is-on" href="anomalies.html">异常<span class="tab-count">2</span></a>
+      <a class="tab" href="settings.html">设置</a>
+    </nav>
+
+    <!-- 基线说明：不解释这个概念，下面的"8.0 倍"用户看不懂 -->
+    <div class="baseline-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 16v-4.5M12 8h.01"/>
+      </svg>
+      <span>
+        <b>基线</b>是这个项目里同一个模型最近 7 天的平均水平。
+        某次调用超出基线几倍，就判定为异常。
+        样本少于 10 次的模型不做判定 —— 数据太少，算出来的"正常"不可信。
+      </span>
+    </div>
+
+    <div class="toolbar">
+      <div class="seg">
+        <button class="seg-btn is-on" type="button">全部</button>
+        <button class="seg-btn" type="button">Token</button>
+        <button class="seg-btn" type="button">响应慢</button>
+        <button class="seg-btn" type="button">错误率</button>
+      </div>
+      <span class="toolbar-note">最近 7 天有 2 条异常</span>
+    </div>
+
+    <!-- ============ 异常列表 ============ -->
+    <div class="anomalies">
+
+      <article class="anomaly">
+        <div class="anomaly-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3.5 2.6 20h18.8z"/><path d="M12 10v4M12 17.2h.01"/>
+          </svg>
+        </div>
+        <div class="anomaly-body">
+          <div class="anomaly-top">
+            <span class="anomaly-type">Token 突增</span>
+            <span class="anomaly-when">11:35:22 · deepseek-reasoner</span>
+          </div>
+          <p class="anomaly-desc">
+            这次调用用了 <b>87,412</b> Token，是平时（10,927）的
+            <b class="is-warn">8.0 倍</b>。响应也跟着变慢到 18.2 秒。
+          </p>
+        </div>
+        <a class="btn btn-ghost btn-sm anomaly-go" href="logs.html">查看详情</a>
+      </article>
+
+      <article class="anomaly is-bad">
+        <div class="anomaly-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/><path d="M12 8v4.5M12 16h.01"/>
+          </svg>
+        </div>
+        <div class="anomaly-body">
+          <div class="anomaly-top">
+            <span class="anomaly-type">错误率偏高</span>
+            <span class="anomaly-when">10-08 全天 · deepseek-reasoner</span>
+          </div>
+          <p class="anomaly-desc">
+            当天 48 次调用里有 <b>12 次失败</b>，错误率
+            <b class="is-bad">25%</b>，远高于平时的 6%。
+            失败原因集中在「请求超时」。
+          </p>
+        </div>
+        <a class="btn btn-ghost btn-sm anomaly-go" href="logs.html">查看详情</a>
+      </article>
+
+    </div>
+
+    <!-- ============ 样本不足 ============
+         故意和上面两条异常卡长得不一样：它是虚线的、灰的、不给结论的。
+         上面两条回答"哪里出了问题"，这一条回答"哪里还看不出来" ——
+         后者绝不能被画成"一切正常"的样子（设计 05 §4.2）。 -->
+    <div class="low-sample">
+      <div class="low-sample-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>
+        </svg>
+      </div>
+      <div class="low-sample-body">
+        <div class="low-sample-top">
+          <span class="low-sample-model">qwen-max</span>
+          <span class="low-sample-when">最近 7 天 4 次调用 · 判定需要 10 次</span>
+        </div>
+        <p class="low-sample-desc">
+          样本太少，算出来的基线不可信 —— 所以这里显示的是「暂时无法判断」，
+          而不是「没有异常」。再积累 <b>6 次</b>调用后开始判定。
+        </p>
+      </div>
+      <span class="tag is-mute">样本不足</span>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>首页 · AI Monitor</title>
+<link rel="stylesheet" href="common.css">
+<style>
+/* 首页专属样式：项目卡片网格 + AI 助手入口。
+   按需求文档 09 §2，首页不做全局 Token/Cost Dashboard，
+   视觉重量由项目卡片上的 sparkline 承担。 */
+
+/* 顶栏右侧的实时状态胶囊（.live）定义在 common.css ——
+   内页顶栏也要用它，留在页面里会导致十个页面各写一份。 */
+
+/* 页面小节的标题行 */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 4px 4px 14px;
+}
+
+.section-title { font-size: var(--fs-lg); font-weight: 650; }
+
+.section-note { color: var(--muted); font-size: var(--fs-sm); }
+
+/* --- 项目卡片网格 --- */
+
+.projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: var(--gutter);
+  margin-bottom: 26px;
+}
+
+.project {
+  display: block;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 19px 20px 16px;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.project:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgba(11, 35, 28, .05), 0 10px 26px rgba(11, 35, 28, .1);
+}
+
+.project-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 3px;
+}
+
+.project-name {
+  font-size: var(--fs-md);
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.project-stack { color: var(--muted); font-size: var(--fs-sm); }
+
+/* sparkline：回答"这个项目最近正常吗" */
+.spark { display: block; width: 100%; height: 40px; margin: 14px 0 12px; }
+
+.project-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #F1F5F3;
+  font-size: var(--fs-xs);
+  color: var(--faint);
+}
+
+.project-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--green-500);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.project-go svg { width: 13px; height: 13px; }
+
+/* 新建项目：虚线卡片，和真实项目卡片明显区分 */
+.project-new {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  min-height: 188px;
+  border: 1.5px dashed var(--green-200);
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--green-500);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  transition: background .18s ease, border-color .18s ease;
+}
+
+.project-new:hover { background: var(--green-50); border-color: var(--green-400); }
+
+.project-new-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-50);
+}
+
+.project-new-icon svg { width: 18px; height: 18px; }
+
+/* 项目数量用满后的提示 */
+.project-limit { color: var(--amber); font-size: var(--fs-xs); }
+
+
+/* --- AI 助手入口 ---
+   不做成一个干巴巴的按钮 —— 给出示例问题，用户才知道能问什么。 */
+
+.ask {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 24px 26px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(120deg, var(--green-700), var(--green-600));
+  color: #fff;
+}
+
+.ask-main { max-width: 46ch; }
+
+.ask-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  color: #fff;
+  margin-bottom: 9px;
+}
+
+.ask-title svg { width: 19px; height: 19px; color: var(--green-200); }
+
+.ask-hint {
+  font-size: var(--fs-sm);
+  color: rgba(255, 255, 255, .68);
+  line-height: 1.75;
+}
+
+/* 示例问题做成"可点击的引子"，让用户知道助手能回答什么 */
+.ask-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 15px;
+}
+
+.ask-chip {
+  padding: 6px 13px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, .12);
+  border: 1px solid rgba(255, 255, 255, .14);
+  color: rgba(255, 255, 255, .9);
+  font-size: var(--fs-sm);
+  transition: background .15s ease;
+}
+
+.ask-chip:hover { background: rgba(255, 255, 255, .22); }
+
+.ask-go {
+  flex: none;
+  background: #fff;
+  color: var(--green-700);
+  padding: 11px 20px;
+  font-weight: 650;
+}
+
+.ask-go:hover { background: var(--green-50); }
+
+
+@media (max-width: 1000px) {
+  .ask { flex-direction: column; align-items: stretch; gap: 20px; }
+  .ask-go { align-self: flex-start; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h3.5l2.5-6 4 13 2.5-7h7.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">AI Monitor</div>
+        <div class="brand-sub">大模型使用监控</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item is-active" href="home.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1.6"/>
+          <rect x="14" y="3" width="7" height="5" rx="1.6"/>
+          <rect x="14" y="12" width="7" height="9" rx="1.6"/>
+          <rect x="3" y="16" width="7" height="5" rx="1.6"/>
+        </svg>
+        <span>首页</span>
+      </a>
+
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M4 12h16M4 17h9"/>
+        </svg>
+        <span>模型管理</span>
+      </a>
+
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4 3.5V6a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 6z"/>
+        </svg>
+        <span>AI 助手</span>
+      </a>
+
+      <div class="nav-label">我的项目</div>
+
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>AI知识问答</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>客服话术生成</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#D98E2B"></span>
+        <span>合同条款审查</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <div class="avatar">开</div>
+        <div>
+          <div class="user-chip-name">开发者</div>
+          <div class="user-chip-role">3 / 3 个项目</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 主内容区 ============ -->
+  <main class="main">
+
+    <header class="page-head">
+      <div>
+        <h1 class="page-title">你好，开发者 👋</h1>
+        <p class="page-sub">
+          3 个项目都在汇报数据，其中
+          <strong style="color:var(--amber)">1 个有异常</strong>需要看一眼。
+        </p>
+      </div>
+      <span class="live">
+        <span class="dot"></span>
+        实时接收上报
+      </span>
+    </header>
+
+    <div class="section-head">
+      <h2 class="section-title">我的项目</h2>
+      <span class="project-limit">已达上限 3 / 3</span>
+    </div>
+
+    <div class="projects">
+
+      <!-- 项目 1：平稳上升 -->
+      <a class="project" href="project-overview.html">
+        <div class="project-top">
+          <div>
+            <div class="project-name">AI知识问答</div>
+            <div class="project-stack">Python · DeepSeek</div>
+          </div>
+          <span class="tag"><span class="dot"></span>正常</span>
+        </div>
+
+        <svg class="spark" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="sp1" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#40916C" stop-opacity=".20"/>
+              <stop offset="100%" stop-color="#40916C" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M0,30 L20,27 L40,28 L60,22 L80,19 L100,21 L120,14 L140,11 L160,8 L160,40 L0,40 Z"
+                fill="url(#sp1)"/>
+          <path d="M0,30 L20,27 L40,28 L60,22 L80,19 L100,21 L120,14 L140,11 L160,8"
+                fill="none" stroke="#40916C" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <div class="project-foot">
+          <span>最近调用 3 分钟前</span>
+          <span class="project-go">
+            查看
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 6l6 6-6 6"/>
+            </svg>
+          </span>
+        </div>
+      </a>
+
+      <!-- 项目 2：波动上升 -->
+      <a class="project" href="project-overview.html">
+        <div class="project-top">
+          <div>
+            <div class="project-name">客服话术生成</div>
+            <div class="project-stack">Java · 通义千问</div>
+          </div>
+          <span class="tag"><span class="dot"></span>正常</span>
+        </div>
+
+        <svg class="spark" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="sp2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#40916C" stop-opacity=".20"/>
+              <stop offset="100%" stop-color="#40916C" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M0,26 L20,30 L40,20 L60,25 L80,15 L100,18 L120,10 L140,13 L160,7 L160,40 L0,40 Z"
+                fill="url(#sp2)"/>
+          <path d="M0,26 L20,30 L40,20 L60,25 L80,15 L100,18 L120,10 L140,13 L160,7"
+                fill="none" stroke="#40916C" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+
+        <div class="project-foot">
+          <span>最近调用 26 分钟前</span>
+          <span class="project-go">
+            查看
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 6l6 6-6 6"/>
+            </svg>
+          </span>
+        </div>
+      </a>
+
+      <!-- 项目 3：中间有尖峰 —— 对应"1 个有异常" -->
+      <a class="project" href="project-overview.html">
+        <div class="project-top">
+          <div>
+            <div class="project-name">合同条款审查</div>
+            <div class="project-stack">Python · Claude</div>
+          </div>
+          <span class="tag is-warn"><span class="dot"></span>有异常</span>
+        </div>
+
+        <svg class="spark" viewBox="0 0 160 40" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="sp3" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#D98E2B" stop-opacity=".22"/>
+              <stop offset="100%" stop-color="#D98E2B" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="M0,28 L20,26 L40,29 L60,25 L80,11 L100,27 L120,24 L140,29 L160,26 L160,40 L0,40 Z"
+                fill="url(#sp3)"/>
+          <path d="M0,28 L20,26 L40,29 L60,25 L80,11 L100,27 L120,24 L140,29 L160,26"
+                fill="none" stroke="#D98E2B" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- 尖峰处点一个标记，把注意力引到异常上 -->
+          <circle cx="80" cy="11" r="3.2" fill="#fff" stroke="#D98E2B" stroke-width="2.2"/>
+        </svg>
+
+        <div class="project-foot">
+          <span>最近调用 1 小时前</span>
+          <span class="project-go">
+            查看
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 6l6 6-6 6"/>
+            </svg>
+          </span>
+        </div>
+      </a>
+
+      <!-- 新建项目卡：创建入口就长这样，只是当前 3/3 满额而置灰。
+           文案写「创建项目」而不是「已达上限」—— 满额是被配额提示
+           （标题右侧那行橙字）说清的事，卡片本身要表明自己的身份。 -->
+      <button class="project-new" type="button" disabled
+              style="cursor:not-allowed;opacity:.55" title="已达项目数量上限 3 个">
+        <span class="project-new-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+        </span>
+        <span>创建项目</span>
+      </button>
+
+    </div>
+
+    <!-- ============ AI 助手入口 ============ -->
+    <section class="ask">
+      <div class="ask-main">
+        <h2 class="ask-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>
+          </svg>
+          问问 AI 助手
+        </h2>
+        <p class="ask-hint">
+          助手可以查你所有项目的数据 —— 它只读你自己的，不会碰到别人的。
+        </p>
+        <div class="ask-samples">
+          <a class="ask-chip" href="#">今天各个项目的使用情况</a>
+          <a class="ask-chip" href="#">对比 AI知识问答 和 客服话术生成 的用量</a>
+          <a class="ask-chip" href="#">合同条款审查 最近哪里不对劲</a>
+        </div>
+      </div>
+      <a class="btn ask-go" href="#">开始提问</a>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

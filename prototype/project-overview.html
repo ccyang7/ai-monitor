@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目概览 · AI知识问答 · AI Monitor</title>
+<link rel="stylesheet" href="common.css">
+<style>
+/* 项目概览页专属样式。
+   这是需求文档里"先结论，后数据"落地最完整的一页：
+   简报条在最上，统计卡片其次，图表和明细在最后。 */
+
+.title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.title-row .page-title { margin-right: 2px; }
+
+/* 图表卡片头部的时间范围切换 */
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: #F0F4F1;
+}
+
+.seg-btn {
+  border: 0;
+  padding: 5px 12px;
+  border-radius: 7px;
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.seg-btn:hover { color: var(--green-600); }
+
+.seg-btn.is-on {
+  background: var(--card);
+  color: var(--green-700);
+  box-shadow: 0 1px 2px rgba(11, 35, 28, .08);
+}
+
+/* 趋势图：手绘 SVG，不引 ECharts —— 原型要能双击直接打开 */
+.chart { display: block; width: 100%; height: auto; margin-top: 6px; }
+
+.chart-card { margin-bottom: var(--gutter); }
+
+/* 最近调用里的异常行 */
+.table tbody tr.is-alert td { background: var(--amber-bg); }
+
+.table tbody tr.is-alert:hover td { background: #FBEAD1; }
+
+.table tbody tr.is-alert .num { color: #A96A15; font-weight: 640; }
+
+.table .time { color: var(--faint); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h3.5l2.5-6 4 13 2.5-7h7.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">AI Monitor</div>
+        <div class="brand-sub">大模型使用监控</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="home.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1.6"/>
+          <rect x="14" y="3" width="7" height="5" rx="1.6"/>
+          <rect x="14" y="12" width="7" height="9" rx="1.6"/>
+          <rect x="3" y="16" width="7" height="5" rx="1.6"/>
+        </svg>
+        <span>首页</span>
+      </a>
+
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M4 12h16M4 17h9"/>
+        </svg>
+        <span>模型管理</span>
+      </a>
+
+      <a class="nav-item" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4 3.5V6a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 6z"/>
+        </svg>
+        <span>AI 助手</span>
+      </a>
+
+      <div class="nav-label">我的项目</div>
+
+      <a class="nav-item is-active" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>AI知识问答</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>客服话术生成</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#D98E2B"></span>
+        <span>合同条款审查</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <div class="avatar">开</div>
+        <div>
+          <div class="user-chip-name">开发者</div>
+          <div class="user-chip-role">3 / 3 个项目</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 主内容区 ============ -->
+  <main class="main">
+
+    <header class="page-head">
+      <div>
+        <a class="crumb" href="home.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 6l-6 6 6 6"/>
+          </svg>
+          我的项目
+        </a>
+        <div class="title-row">
+          <h1 class="page-title">AI知识问答</h1>
+          <span class="tag is-mute">Python</span>
+          <span class="tag is-mute">DeepSeek</span>
+          <span class="tag"><span class="dot"></span>正常</span>
+        </div>
+      </div>
+      <span class="live">
+        <span class="dot"></span>
+        实时接收上报
+      </span>
+    </header>
+
+    <!-- ============ 简报条：先给结论 ============
+         项目有异常，加 is-alert —— 左侧色条换成暖色，
+         这是"需要注意"最省字的表达方式。 -->
+    <section class="brief is-alert">
+      <div class="brief-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 18V9M10 18V5M16 18v-6M22 18H2"/>
+        </svg>
+      </div>
+      <div>
+        <p class="brief-text">
+          今天调用 <strong>145 次</strong>，比昨天多 <span class="up">32%</span>。
+          Token 用了 <strong>82.4 万</strong>，九成集中在 deepseek-chat。
+          有 <strong>2 次调用</strong>的 Token 明显偏高，最大一次是平时的 8 倍，建议看一眼。
+          <a class="brief-link" href="anomalies.html">
+            查看异常
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </p>
+        <p class="brief-time">数据更新于 09:15</p>
+      </div>
+    </section>
+
+    <!-- ============ 今日指标 ============ -->
+    <div class="stat-row">
+
+      <div class="stat">
+        <div class="stat-top">
+          <span class="stat-name">今日调用</span>
+          <span class="stat-chip">正常</span>
+        </div>
+        <div class="stat-value">145<span class="stat-unit">次</span></div>
+        <div class="stat-foot">
+          <span>昨天 110 次</span>
+          <span class="stat-delta">↗ 32%</span>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-top">
+          <span class="stat-name">Token 用量</span>
+          <span class="stat-chip is-warn">偏高</span>
+        </div>
+        <div class="stat-value">82.4<span class="stat-unit">万</span></div>
+        <div class="stat-foot">
+          <span>昨天 69.8 万</span>
+          <span class="stat-delta">↗ 18%</span>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-top">
+          <span class="stat-name">今日费用</span>
+          <span class="stat-chip">正常</span>
+        </div>
+        <div class="stat-value">¥12.40</div>
+        <div class="stat-foot">
+          <span>昨天 ¥10.02</span>
+          <span class="stat-delta">↗ 24%</span>
+        </div>
+      </div>
+
+      <div class="stat">
+        <div class="stat-top">
+          <span class="stat-name">平均响应</span>
+          <span class="stat-chip">正常</span>
+        </div>
+        <div class="stat-value">2.4<span class="stat-unit">秒</span></div>
+        <div class="stat-foot">
+          <span>昨天 2.6 秒</span>
+          <span class="stat-delta">↘ 8%</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ Token 趋势 ============ -->
+    <section class="card chart-card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Token 使用趋势</h2>
+          <p class="card-hint">最近 7 天，单位：万 Token</p>
+        </div>
+        <div class="seg">
+          <button class="seg-btn" type="button">今日</button>
+          <button class="seg-btn is-on" type="button">7 天</button>
+          <button class="seg-btn" type="button">30 天</button>
+        </div>
+      </div>
+
+      <svg class="chart" viewBox="0 0 720 210" role="img"
+           aria-label="最近 7 天 Token 使用趋势：从 12 万增长到 28 万，中间 10-07 达到 34 万的峰值">
+
+        <defs>
+          <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"   stop-color="#40916C" stop-opacity=".22"/>
+            <stop offset="100%" stop-color="#40916C" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+
+        <!-- 网格线 -->
+        <g stroke="#EDF2EF" stroke-width="1">
+          <line x1="56" y1="16"  x2="692" y2="16"/>
+          <line x1="56" y1="54"  x2="692" y2="54"/>
+          <line x1="56" y1="92"  x2="692" y2="92"/>
+          <line x1="56" y1="130" x2="692" y2="130"/>
+          <line x1="56" y1="168" x2="692" y2="168"/>
+        </g>
+
+        <!-- Y 轴刻度 -->
+        <g fill="#9AA9A2" font-size="11" text-anchor="end"
+           font-family="system-ui, -apple-system, sans-serif">
+          <text x="44" y="20">40</text>
+          <text x="44" y="58">30</text>
+          <text x="44" y="96">20</text>
+          <text x="44" y="134">10</text>
+          <text x="44" y="172">0</text>
+        </g>
+
+        <!-- 面积 -->
+        <path d="M56,122 L162,100 L268,111 L374,69 L480,84 L586,39 L692,62 L692,168 L56,168 Z"
+              fill="url(#areaFill)"/>
+
+        <!-- 基线参考线：近 7 天均值。异常判定就是拿每天的实际值跟它比 ——
+             不画出来，用户不知道"多少算高"（见设计 05）。 -->
+        <line x1="56" y1="84" x2="692" y2="84"
+              stroke="#D98E2B" stroke-width="1.4" stroke-dasharray="5 5" opacity=".6"/>
+        <text x="690" y="79" fill="#D98E2B" font-size="11" text-anchor="end"
+              font-weight="600" opacity=".9"
+              font-family="system-ui, -apple-system, sans-serif">7 天均值 22.1 万</text>
+
+        <!-- 折线 -->
+        <path d="M56,122 L162,100 L268,111 L374,69 L480,84 L586,39 L692,62"
+              fill="none" stroke="#40916C" stroke-width="2.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+
+        <!-- 今天的数据点 -->
+        <circle cx="692" cy="62" r="4.5" fill="#40916C" stroke="#fff" stroke-width="2.5"/>
+
+        <!-- X 轴日期 -->
+        <g fill="#9AA9A2" font-size="11" text-anchor="middle"
+           font-family="system-ui, -apple-system, sans-serif">
+          <text x="56"  y="196">10-03</text>
+          <text x="162" y="196">10-04</text>
+          <text x="268" y="196">10-05</text>
+          <text x="374" y="196">10-06</text>
+          <text x="480" y="196">10-07</text>
+          <text x="586" y="196">10-08</text>
+          <text x="692" y="196">10-09</text>
+        </g>
+      </svg>
+    </section>
+
+    <!-- ============ 最近调用 ============ -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="card-title">最近调用</h2>
+        <a class="link" style="font-size:var(--fs-sm)" href="#">查看全部 145 条</a>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="padding-left:0">时间</th>
+            <th>模型</th>
+            <th class="num">Token</th>
+            <th class="num">响应</th>
+            <th style="text-align:right;padding-right:0">状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="time" style="padding-left:0">11:42:31</td>
+            <td>deepseek-chat</td>
+            <td class="num">12,283</td>
+            <td class="num">2.8s</td>
+            <td style="text-align:right;padding-right:0"><span class="tag"><span class="dot"></span>成功</span></td>
+          </tr>
+          <tr>
+            <td class="time" style="padding-left:0">11:38:07</td>
+            <td>deepseek-chat</td>
+            <td class="num">8,930</td>
+            <td class="num">1.9s</td>
+            <td style="text-align:right;padding-right:0"><span class="tag"><span class="dot"></span>成功</span></td>
+          </tr>
+          <!-- 异常行：Token 是平时的 8 倍 -->
+          <tr class="is-alert">
+            <td class="time" style="padding-left:0">11:35:22</td>
+            <td>deepseek-reasoner</td>
+            <td class="num">87,412</td>
+            <td class="num">18.2s</td>
+            <td style="text-align:right;padding-right:0"><span class="tag is-warn"><span class="dot"></span>Token 异常</span></td>
+          </tr>
+          <tr>
+            <td class="time" style="padding-left:0">11:31:45</td>
+            <td>deepseek-chat</td>
+            <td class="num">5,120</td>
+            <td class="num">1.4s</td>
+            <td style="text-align:right;padding-right:0"><span class="tag"><span class="dot"></span>成功</span></td>
+          </tr>
+          <tr>
+            <td class="time" style="padding-left:0">11:28:03</td>
+            <td>deepseek-chat</td>
+            <td class="num">21,640</td>
+            <td class="num">3.6s</td>
+            <td style="text-align:right;padding-right:0"><span class="tag"><span class="dot"></span>成功</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>

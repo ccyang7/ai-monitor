@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型管理 · AI Monitor</title>
+<link rel="stylesheet" href="common.css">
+<style>
+/* 模型管理页专属样式。
+   这一页要讲清楚"内置模型"和"自建模型"的区别 —— 它们同在一张表里，
+   但权限完全不同。 */
+
+.price {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.price-unit { color: var(--faint); font-size: var(--fs-xs); }
+
+.model-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.model-name code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* 内置模型的操作列：不是禁用按钮，而是明确写"不可修改" */
+.locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--faint);
+  font-size: var(--fs-xs);
+}
+
+.locked svg { width: 13px; height: 13px; }
+
+.row-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* --- 新增模型的表单（原型里直接展开，真实实现用弹窗） --- */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #F1F5F3;
+}
+
+.section-gap { margin-bottom: var(--gutter); }
+
+
+@media (max-width: 1080px) {
+  .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ 侧边栏 ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12h3.5l2.5-6 4 13 2.5-7h7.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">AI Monitor</div>
+        <div class="brand-sub">大模型使用监控</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item" href="home.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9" rx="1.6"/>
+          <rect x="14" y="3" width="7" height="5" rx="1.6"/>
+          <rect x="14" y="12" width="7" height="9" rx="1.6"/>
+          <rect x="3" y="16" width="7" height="5" rx="1.6"/>
+        </svg>
+        <span>首页</span>
+      </a>
+      <a class="nav-item is-active" href="models.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h16M4 12h16M4 17h9"/>
+        </svg>
+        <span>模型管理</span>
+      </a>
+      <a class="nav-item" href="chat.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 14.5a2.5 2.5 0 0 1-2.5 2.5H8l-4 3.5V6a2.5 2.5 0 0 1 2.5-2.5h11A2.5 2.5 0 0 1 20 6z"/>
+        </svg>
+        <span>AI 助手</span>
+      </a>
+
+      <div class="nav-label">我的项目</div>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>AI知识问答</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#52B788"></span>
+        <span>客服话术生成</span>
+      </a>
+      <a class="nav-item" href="project-overview.html">
+        <span class="dot" style="color:#D98E2B"></span>
+        <span>合同条款审查</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="user-chip">
+        <div class="avatar">开</div>
+        <div>
+          <div class="user-chip-name">开发者</div>
+          <div class="user-chip-role">3 / 3 个项目</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 主内容区 ============ -->
+  <main class="main">
+
+    <header class="page-head">
+      <div>
+        <h1 class="page-title">模型管理</h1>
+        <p class="page-sub">这里配的价格，决定了调用日志里的费用怎么算</p>
+      </div>
+      <div class="page-actions">
+        <span class="live">
+          <span class="dot"></span>
+          实时接收上报
+        </span>
+        <button class="btn btn-primary" type="button">新增模型</button>
+      </div>
+    </header>
+
+    <!-- 两类模型的区别：不解释清楚，用户会疑惑为什么有些行点不动 -->
+    <div class="note section-gap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 16v-4.5M12 8h.01"/>
+      </svg>
+      <span>
+        <b>内置模型</b>是系统预置的，所有用户都能用，但谁都不能改它的价格。
+        <b>自建模型</b>只有你自己能看到、能改。
+        改价格只影响<b>之后</b>的调用 —— 已经记录的历史成本不会跟着变。
+      </span>
+    </div>
+
+    <!-- ============ 模型列表 ============ -->
+    <section class="card section-gap">
+      <div class="card-head">
+        <h2 class="card-title">可用模型</h2>
+        <span class="card-hint">共 4 个</span>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="padding-left:0">模型</th>
+            <th>供应商</th>
+            <th class="num">输入单价</th>
+            <th class="num">输出单价</th>
+            <th>来源</th>
+            <th style="text-align:right;padding-right:0">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding-left:0">
+              <div class="model-name"><code>deepseek-chat</code></div>
+            </td>
+            <td>deepseek</td>
+            <td class="num"><span class="price">¥1.00</span></td>
+            <td class="num"><span class="price">¥2.00</span></td>
+            <td><span class="tag is-mute">内置</span></td>
+            <td style="text-align:right;padding-right:0">
+              <span class="locked">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+                </svg>
+                不可修改
+              </span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-left:0">
+              <div class="model-name"><code>deepseek-reasoner</code></div>
+            </td>
+            <td>deepseek</td>
+            <td class="num"><span class="price">¥4.00</span></td>
+            <td class="num"><span class="price">¥16.00</span></td>
+            <td><span class="tag is-mute">内置</span></td>
+            <td style="text-align:right;padding-right:0">
+              <span class="locked">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+                </svg>
+                不可修改
+              </span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-left:0">
+              <div class="model-name"><code>gpt-4o</code></div>
+            </td>
+            <td>openai</td>
+            <td class="num"><span class="price">¥18.00</span></td>
+            <td class="num"><span class="price">¥72.00</span></td>
+            <td><span class="tag is-mute">内置</span></td>
+            <td style="text-align:right;padding-right:0">
+              <span class="locked">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+                </svg>
+                不可修改
+              </span>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding-left:0">
+              <div class="model-name">
+                <code>my-finetuned-v2</code>
+              </div>
+            </td>
+            <td>openai</td>
+            <td class="num"><span class="price">¥5.00</span></td>
+            <td class="num"><span class="price">¥15.00</span></td>
+            <td><span class="tag">自建</span></td>
+            <td style="text-align:right;padding-right:0">
+              <div class="row-actions">
+                <button class="btn btn-ghost btn-sm" type="button">编辑</button>
+                <button class="btn btn-ghost btn-sm" type="button">禁用</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="margin-top:14px;color:var(--faint);font-size:var(--fs-xs)">
+        单价单位：元 / 百万 Token
+      </p>
+    </section>
+
+    <!-- ============ 新增模型（原型里直接展开） ============ -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">新增模型</h2>
+          <p class="card-hint">你的接入项目用了内置列表里没有的模型时，在这里补上价格</p>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="field">
+          <label class="field-label" for="mname">模型名称</label>
+          <input class="input" id="mname" type="text" placeholder="如 qwen-max">
+          <span class="field-hint">要和上报时传的 model 完全一致</span>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="mprov">供应商</label>
+          <select class="input" id="mprov">
+            <option>deepseek</option>
+            <option>openai</option>
+            <option>qwen</option>
+            <option>其他</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="minp">输入单价</label>
+          <input class="input" id="minp" type="text" placeholder="0.00">
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="mout">输出单价</label>
+          <input class="input" id="mout" type="text" placeholder="0.00">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-primary" type="button">保存</button>
+        <button class="btn btn-ghost" type="button">取消</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>
