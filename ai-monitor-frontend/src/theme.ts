@@ -58,4 +58,15 @@ export const themeOverrides: GlobalThemeOverrides = {
     textColor: '#2C3E37',
     boxShadow: '0 12px 40px rgba(11, 35, 28, .22)',
   },
+
+  // 同上：n-drawer 这个类也是 naive 合并到面板根元素上的
+  Drawer: {
+    color: '#FFFFFF',
+    textColor: '#2C3E37',
+    boxShadow: '-10px 0 44px rgba(11, 35, 28, .16)',
+    // 原型里的抽屉是贴边的直角面板，naive 默认给左侧两个圆角
+    borderRadius: '0',
+    // 抽屉内部自己排版（标题栏 + 内容），naive 的默认内边距要归零
+    bodyPadding: '0',
+  },
 }

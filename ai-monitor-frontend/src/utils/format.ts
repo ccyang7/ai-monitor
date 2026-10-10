@@ -19,6 +19,32 @@ export function formatDateTime(iso: string): string {
   return `${formatDate(iso)} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+export function formatDateTimeFull(iso: string): string {
+  const date = toDate(iso)
+  if (!date) return '—'
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  return `${formatDate(iso)} ${time}`
+}
+
+export function formatNumber(value: number): string {
+  return value.toLocaleString('zh-CN')
+}
+
+// 毫秒和秒混在一张表里读起来很乱，统一成「不足 1 秒看毫秒，超过就看秒」
+export function formatLatency(ms: number): string {
+  return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+}
+
+// 只做展示格式化，不参与任何运算 —— 金额口径以服务端返回的 estimated_cost 为准
+export function formatCost(value: number | null): string {
+  if (value === null) return '—'
+  const amount = value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  })
+  return `¥${amount}`
+}
+
 export function formatRelative(iso: string | null): string {
   if (!iso) return '尚未接入数据'
   const date = toDate(iso)

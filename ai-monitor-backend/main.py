@@ -3,7 +3,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import auth, health, projects, users
+from app.api import auth, health, logs, projects, users
 from app.config import settings
 from app.exceptions import BusinessError
 
@@ -15,6 +15,9 @@ app.include_router(users.router, prefix=settings.api_v1_prefix)
 app.include_router(projects.router, prefix=settings.api_v1_prefix)
 # 吊销 Key 的路径是 /api-keys/{key_id}，不带 /projects 前缀，所以是另一个 router
 app.include_router(projects.api_key_router, prefix=settings.api_v1_prefix)
+app.include_router(logs.router, prefix=settings.api_v1_prefix)
+# 日志列表的路径是 /projects/{project_id}/logs，前缀是 /projects 而不是 /logs
+app.include_router(logs.project_logs_router, prefix=settings.api_v1_prefix)
 
 
 @app.exception_handler(BusinessError)

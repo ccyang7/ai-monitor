@@ -4,7 +4,17 @@
 # relationship 里写的字符串类名要能找到真实类
 from app.models.api_key import ApiKey
 from app.models.base import Base, TimestampMixin
+from app.models.llm_request import LLMRequest
+from app.models.model import Model
 from app.models.project import Project
 from app.models.user import User
 
-__all__ = ["ApiKey", "Base", "Project", "TimestampMixin", "User"]
+__all__ = [
+    "ApiKey",
+    "Base",
+    "LLMRequest",
+    "Model",
+    "Project",
+    "TimestampMixin",
+    "User",
+]

@@ -53,9 +53,11 @@ class ProjectListItem(BaseModel):
     tech_stack: str | None
     status: str
 
-    # 数据源 llm_requests 表要到阶段 6 才有。ORM 对象上没有这两个属性，Pydantic 会
-    # 回落到默认值，所以 service 里一行都不用写。刻意不编假数据 —— null 表示「暂时没有」
+    # 由 service 用 llm_requests 聚合后显式传入。没有上报记录时是 null，
+    # 前端靠它区分「还没接入」和「上报正常」—— 不能编造，也不能拿项目创建时间冒充
     last_called_at: datetime | None = None
+
+    # 异常判定要到阶段 9 才有数据源，在那之前恒为 false
     has_anomaly: bool = False
 
 

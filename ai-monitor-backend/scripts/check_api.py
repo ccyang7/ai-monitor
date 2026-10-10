@@ -211,7 +211,7 @@ def check_project_crud() -> None:
     item = body["items"][0]
     expect(
         "last_called_at" in item and item["last_called_at"] is None,
-        "last_called_at 在阶段 6 之前应返回 null，不该编造假数据",
+        "没上报过数据的项目，last_called_at 应是 null —— 不能拿项目创建时间冒充",
     )
     expect(item["has_anomaly"] is False, "has_anomaly 在阶段 9 之前应是 false")
 

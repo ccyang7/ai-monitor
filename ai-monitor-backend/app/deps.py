@@ -1,18 +1,24 @@
-"""用户隔离的依赖链：从 JWT 取当前用户，再校验项目与 API Key 的归属。"""
+"""用户隔离的依赖链：从 JWT 取当前用户，验证项目与 API Key 的归属；上报接口走 X-API-Key。"""
+
+from datetime import datetime, timezone
 
 import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApiKey, Project, User
-from app.security import decode_access_token
+from app.models import ApiKey, LLMRequest, Project, User
+from app.security import decode_access_token, hash_api_key
 
 # auto_error=False：没带 token 时自己抛，好统一错误信息风格。
 # 用 HTTPBearer 而非 OAuth2PasswordBearer：后者要求登录接口收 OAuth2 表单格式，而我们是 JSON
 _bearer_scheme = HTTPBearer(auto_error=False)
+
+# auto_error 同样必须关掉：它默认为 True 时，请求缺这个头会返回 403，
+# 而设计文档和接入方都按 401 处理 —— 「没带凭证」和「没权限」是两回事
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 def get_current_user(
@@ -76,3 +82,51 @@ def get_own_api_key(
             status_code=status.HTTP_404_NOT_FOUND, detail="API Key 不存在"
         )
     return key
+
+
+def get_own_log(
+    log_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> LLMRequest:
+    # 与 get_own_api_key 同一个模式：详情接口的路径是 /logs/{log_id}，没有 project_id
+    # 可用，get_own_project 帮不上忙 —— 而日志同样是越权入口，归属校验必须显式写在 join 里
+    log = db.scalar(
+        select(LLMRequest)
+        .join(Project)
+        .where(LLMRequest.id == log_id, Project.owner_id == user.id)
+    )
+    if log is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="日志不存在")
+    return log
+
+
+def get_api_key_project(
+    api_key: str | None = Depends(_api_key_header),
+    db: Session = Depends(get_db),
+) -> Project:
+    """上报接口的认证：从 X-API-Key 头识别项目。返回的是项目，不是用户。"""
+    # 缺头、Key 不存在、已吊销、已过期，全部返回同一个 401 —— 区分开来等于
+    # 告诉攻击者「你猜的这把 Key 存在，只是吊销了」，能用来探测 Key 的有效性
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="API Key 无效或已失效",
+    )
+
+    if not api_key:
+        raise unauthorized
+
+    # 查的是哈希：库表里根本没存明文，明文只在创建那一刻返回过一次
+    key = db.scalar(select(ApiKey).where(ApiKey.key_hash == hash_api_key(api_key)))
+    if key is None or key.status != "active":
+        raise unauthorized
+
+    if key.expired_at is not None and key.expired_at <= datetime.now(timezone.utc):
+        raise unauthorized
+
+    project = db.get(Project, key.project_id)
+    if project is None:
+        # 外键 CASCADE 下正常不会走到这里，兜底防住「Key 在、项目被删了」的并发窗口
+        raise unauthorized
+
+    return project

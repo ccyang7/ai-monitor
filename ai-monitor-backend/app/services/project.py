@@ -1,24 +1,39 @@
 """项目的查询、创建、删除，以及配额与重名校验。"""
 
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.exceptions import BusinessError
-from app.models import Project, User
+from app.models import LLMRequest, Project, User
 from app.schemas.project import ProjectCreateIn, ProjectUpdateIn
 from app.services import api_key as api_key_service
 
 
-def list_projects(db: Session, user: User) -> list[Project]:
+def list_projects(db: Session, user: User) -> list[tuple[Project, datetime | None]]:
     # owner_id 过滤绝不能省 —— 漏掉就是列出全系统所有项目
-    return list(
+    projects = list(
         db.scalars(
             select(Project)
             .where(Project.owner_id == user.id)
             .order_by(Project.created_at.desc())
         )
     )
+    if not projects:
+        return []
+
+    # 一次查回所有项目的最近调用时间，而不是逐个项目查一遍（N+1）：
+    # 首页项目不多时开销也看不出来，但没有理由留下这种模式
+    last_called_map = dict(
+        db.execute(
+            select(LLMRequest.project_id, func.max(LLMRequest.created_at))
+            .where(LLMRequest.project_id.in_([p.id for p in projects]))
+            .group_by(LLMRequest.project_id)
+        ).all()
+    )
+    return [(p, last_called_map.get(p.id)) for p in projects]
 
 
 def create_project(

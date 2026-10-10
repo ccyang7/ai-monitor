@@ -14,7 +14,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/HomeView.vue'),
   },
   {
-    // 阶段 6 之后这里会拆成 /projects/:id（概览）+ 各分析子页，设置退居其中一个 tab
+    // 项目下的子页，靠 ProjectTabs 互相切换；概览页做出来之后会补成 /projects/:id
+    path: '/projects/:projectId/logs',
+    name: 'project-logs',
+    component: () => import('@/views/ProjectLogsView.vue'),
+    props: true,
+  },
+  {
     path: '/projects/:projectId/settings',
     name: 'project-settings',
     component: () => import('@/views/ProjectSettingsView.vue'),

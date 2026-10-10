@@ -13,6 +13,7 @@ import {
 } from '@/api/projects'
 import ApiKeyReveal from '@/components/ApiKeyReveal.vue'
 import AppModal from '@/components/AppModal.vue'
+import ProjectTabs from '@/components/ProjectTabs.vue'
 import { useProjectsStore } from '@/stores/projects'
 import { formatDate, formatDateTime } from '@/utils/format'
 import { TECH_STACK_OPTIONS } from '@/utils/project'
@@ -234,6 +235,8 @@ async function confirmDelete(): Promise<void> {
       </div>
     </div>
   </header>
+
+  <ProjectTabs :project-id="projectId" />
 
   <div v-if="loading" class="loading">
     <span class="spinner" />

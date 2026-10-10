@@ -520,6 +520,10 @@
   border-bottom: 0;
 }
 
+.table tbody tr:hover td {
+  background: var(--green-50);
+}
+
 .table .num {
   text-align: right;
   color: var(--ink);
@@ -754,4 +758,15 @@
 /* naive 的滚动容器没有内边距，窄屏上弹窗会贴着屏幕边缘 */
 .n-modal-scroll-content {
   padding: 24px;
+}
+
+/* 理由同上：drawer 的遮罩色也是写死的 rgba(0, 0, 0, .3) */
+.n-drawer-container .n-drawer-mask {
+  background-color: rgba(11, 35, 28, 0.34);
+}
+
+/* 面板宽度由 width 属性给（560px），窄屏上收一下。
+   写 max-width 而不是把宽度换成 min(560px, 94vw)：后者要依赖 naive 原样透传字符串值 */
+.n-drawer.n-drawer--right-placement {
+  max-width: 94vw;
 }

@@ -9,6 +9,7 @@ from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.api_key import ApiKey
+    from app.models.llm_request import LLMRequest
     from app.models.user import User
 
 
@@ -40,6 +41,12 @@ class Project(Base, TimestampMixin):
     # passive_deletes：删项目时把 Key 交给数据库的 ON DELETE CASCADE，
     # 不先 SELECT 出所有 Key 再逐条 DELETE
     api_keys: Mapped[list["ApiKey"]] = relationship(
+        back_populates="project",
+        passive_deletes=True,
+    )
+
+    # 同上：一个项目可能有几十万条日志，删项目时绝不能让 ORM 把它们全加载进内存
+    llm_requests: Mapped[list["LLMRequest"]] = relationship(
         back_populates="project",
         passive_deletes=True,
     )

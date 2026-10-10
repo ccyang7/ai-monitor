@@ -28,10 +28,19 @@ def list_projects(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ProjectListOut:
-    projects = project_service.list_projects(db, user)
+    rows = project_service.list_projects(db, user)
     return ProjectListOut(
-        items=[ProjectListItem.model_validate(p) for p in projects],
-        total=len(projects),
+        items=[
+            ProjectListItem(
+                id=project.id,
+                name=project.name,
+                tech_stack=project.tech_stack,
+                status=project.status,
+                last_called_at=last_called_at,
+            )
+            for project, last_called_at in rows
+        ],
+        total=len(rows),
     )
 
 

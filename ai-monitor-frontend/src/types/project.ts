@@ -32,8 +32,9 @@ export interface ProjectListItem {
   name: string
   tech_stack: string | null
   status: string
-  // 数据表要到阶段 6 才有，现在恒为 null / false
+  // 该项目最近一次上报的时间；从没上报过则为 null
   last_called_at: string | null
+  // 异常判定要到阶段 9 才有数据源，在那之前恒为 false
   has_anomaly: boolean
 }
 
