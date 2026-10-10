@@ -1,0 +1,757 @@
+/* 通用组件类。来源：prototype/common.css，只搬了当前页面用得到的部分。 */
+
+/* --- 布局骨架：侧边栏 + 主内容区 --- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  gap: var(--gutter);
+  padding: var(--gutter);
+  min-height: 100vh;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: var(--gutter);
+  height: calc(100vh - var(--gutter) * 2);
+  display: flex;
+  flex-direction: column;
+  background: var(--green-800);
+  border-radius: var(--r-xl);
+  padding: 22px 14px 16px;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0 8px 22px;
+}
+
+.brand-mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--green-400);
+  color: var(--green-900);
+}
+
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.brand-name {
+  color: #fff;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+}
+
+.brand-sub {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: var(--r-md);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: var(--fs-base);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-item svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  opacity: 0.85;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.nav-item.is-active {
+  background: var(--green-100);
+  color: var(--green-800);
+  font-weight: 600;
+}
+
+.nav-item.is-active svg {
+  opacity: 1;
+}
+
+.nav-label {
+  padding: 18px 10px 7px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* 侧边栏里的项目名可能很长，截断而不是换行把导航撑高 */
+.nav-item .nav-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-foot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.avatar {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-500);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.user-chip-name {
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-chip-role {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.user-chip-quit {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--r-sm);
+  display: grid;
+  place-items: center;
+}
+
+.user-chip-quit:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.user-chip-quit svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --- 主内容区 --- */
+
+.main {
+  min-width: 0;
+  padding-bottom: 24px;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 4px 20px;
+}
+
+.page-title {
+  font-size: var(--fs-xl);
+  font-weight: 680;
+  letter-spacing: -0.01em;
+}
+
+.page-sub {
+  color: var(--muted);
+  font-size: var(--fs-base);
+  margin-top: 3px;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: var(--r-pill);
+  background: var(--green-50);
+  color: var(--green-600);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.live .dot {
+  animation: pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  margin-bottom: 9px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.crumb:hover {
+  color: var(--green-500);
+}
+
+.crumb svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* --- 卡片 --- */
+
+.card {
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.card-title {
+  font-size: var(--fs-md);
+  font-weight: 640;
+}
+
+.card-hint {
+  color: var(--faint);
+  font-size: var(--fs-sm);
+  margin-top: 2px;
+}
+
+/* --- 提示条 --- */
+
+.note {
+  display: flex;
+  gap: 12px;
+  padding: 15px 18px;
+  border-radius: var(--r-lg);
+  background: var(--green-50);
+  border: 1px solid var(--green-100);
+  font-size: var(--fs-sm);
+  line-height: 1.75;
+  color: var(--text);
+}
+
+.note svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--green-500);
+  margin-top: 2px;
+}
+
+.note b {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* --- 状态标签 --- */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  background: var(--green-50);
+  color: var(--green-600);
+  white-space: nowrap;
+}
+
+.tag.is-warn {
+  background: var(--amber-bg);
+  color: #a96a15;
+}
+
+.tag.is-bad {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.tag.is-mute {
+  background: #f0f2f1;
+  color: var(--muted);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* --- 按钮 --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.btn-primary {
+  background: var(--green-500);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--green-600);
+}
+
+.btn-ghost {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--green-50);
+  box-shadow: inset 0 0 0 1px var(--green-200);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: var(--fs-sm);
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-danger {
+  background: var(--card);
+  color: var(--red);
+  box-shadow: inset 0 0 0 1px #e8c4c0;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--red-bg);
+}
+
+/* --- 表单 --- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.field-hint {
+  font-size: var(--fs-xs);
+  color: var(--faint);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--card);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--faint);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--green-400);
+  box-shadow: 0 0 0 3px var(--green-50);
+}
+
+.input:disabled,
+.textarea:disabled,
+.select:disabled {
+  background: #f7f9f8;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+/* 字段级错误 */
+.field-error {
+  font-size: var(--fs-xs);
+  color: var(--red);
+}
+
+.input.is-invalid {
+  border-color: #e8c4c0;
+}
+
+/* --- 表格 --- */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 14px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid #f1f5f3;
+  color: var(--text);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table .num {
+  text-align: right;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.table th.num {
+  text-align: right;
+}
+
+/* --- 空状态 --- */
+
+.empty {
+  text-align: center;
+  padding: 46px 20px;
+  color: var(--muted);
+}
+
+.empty-icon {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 12px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-50);
+  color: var(--green-400);
+}
+
+.empty-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.empty-title {
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.empty-hint {
+  font-size: var(--fs-sm);
+}
+
+/* --- 加载占位 --- */
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 46px 20px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--green-100);
+  border-top-color: var(--green-500);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- 一次性明文 Key 的提示块 ---
+   它要传达"错过就没有了"，所以用琥珀色而不是常规绿：这是一个需要用户停一下的地方 */
+
+.key-reveal {
+  padding: 18px 20px;
+  border-radius: var(--r-md);
+  background: var(--amber-bg);
+  border: 1px solid #f3dfb8;
+}
+
+.key-reveal-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-base);
+  font-weight: 660;
+  color: #8a5710;
+  margin-bottom: 12px;
+}
+
+.key-reveal-head svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.key-reveal-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--r-sm);
+  background: var(--card);
+  border: 1px solid #f3dfb8;
+}
+
+.key-reveal-value code {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  /* Key 有 48 位，480px 宽的弹窗一行塞不下。宁可折行也不能横向滚动 ——
+     这是唯一一次能看到完整 Key 的机会，还要用户自己拖滚动条找尾巴就太荒唐了 */
+  overflow-wrap: anywhere;
+}
+
+.key-reveal-hint {
+  margin-top: 11px;
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: #8a5710;
+}
+
+/* --- 弹窗 --- */
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  background: var(--card);
+  border-radius: var(--r-lg);
+  padding: 22px 24px 24px;
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.modal-title {
+  font-size: var(--fs-lg);
+  font-weight: 660;
+}
+
+.modal-sub {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  margin-top: 3px;
+}
+
+.modal-close {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background: var(--green-50);
+  color: var(--green-600);
+}
+
+.modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #f1f5f3;
+}
+
+/* 表单级错误，和登录页的 .auth-error 同一个视觉语言 */
+.form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  background: var(--red-bg);
+  color: var(--red);
+  font-size: var(--fs-sm);
+}
+
+.form-error svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+}
+
+/* --- 响应式 --- */
+
+@media (max-width: 860px) {
+  :root {
+    --sidebar-w: 200px;
+  }
+  .page-head {
+    flex-direction: column;
+    gap: 14px;
+  }
+}
+
+/* --- naive-ui 补丁 --- */
+
+/* 遮罩色在 naive 里是写死的 rgba(0,0,0,.4)，没有对应的 theme token。
+   多套一层父选择器是为了压过它 —— 同等权重下谁生效取决于样式注入顺序，不能赌 */
+.n-modal-container .n-modal-mask {
+  background-color: rgba(11, 35, 28, 0.42);
+}
+
+/* naive 的滚动容器没有内边距，窄屏上弹窗会贴着屏幕边缘 */
+.n-modal-scroll-content {
+  padding: 24px;
+}

@@ -1,17 +1,24 @@
-"""AI Monitor 后端 —— 环境验证入口。
+"""FastAPI 应用装配：创建 app、挂载路由、注册全局异常处理。"""
 
-这个文件目前只有一个作用：验证 Python + FastAPI + uvicorn 环境是否跑得通。
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
-正式的 FastAPI 应用结构（路由分层、配置管理、依赖注入、数据库连接）
-将在阶段 2 中由你自己搭建 —— 所以这里刻意保持最小。
-"""
+from app.api import auth, health, projects, users
+from app.config import settings
+from app.exceptions import BusinessError
 
-from fastapi import FastAPI
+app = FastAPI(title=settings.app_name)
 
-app = FastAPI(title="AI Monitor API")
+app.include_router(health.router)
+app.include_router(auth.router, prefix=settings.api_v1_prefix)
+app.include_router(users.router, prefix=settings.api_v1_prefix)
+app.include_router(projects.router, prefix=settings.api_v1_prefix)
+# 吊销 Key 的路径是 /api-keys/{key_id}，不带 /projects 前缀，所以是另一个 router
+app.include_router(projects.api_key_router, prefix=settings.api_v1_prefix)
 
 
-@app.get("/health")
-def health():
-    """健康检查：能返回 {"status": "ok"} 就说明环境正常。"""
-    return {"status": "ok"}
+@app.exception_handler(BusinessError)
+def handle_business_error(request: Request, exc: BusinessError) -> JSONResponse:
+    # service 层不感知 HTTP，不抛 HTTPException，所以需要这个翻译官。
+    # 响应体统一成 {"detail": ...}，和 FastAPI 原生错误格式一致，前端只写一套解析
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})

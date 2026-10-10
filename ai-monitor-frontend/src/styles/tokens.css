@@ -1,0 +1,111 @@
+/* 设计令牌与基础重置。来源：prototype/common.css，两处保持一致。 */
+
+:root {
+  --green-900: #0b231c;
+  --green-800: #12362a;
+  --green-700: #1b4332;
+  --green-600: #24563f;
+  --green-500: #40916c;
+  --green-400: #52b788;
+  --green-300: #74c69d;
+  --green-200: #b7e4c7;
+  --green-100: #d8f3dc;
+  --green-50: #ebf7ef;
+
+  --ink: #0f2a22;
+  --text: #2c3e37;
+  --muted: #6b7f76;
+  --faint: #9aa9a2;
+  --line: #e3eae6;
+  --paper: #f4f7f5;
+  --card: #ffffff;
+
+  --amber: #d98e2b;
+  --amber-bg: #fdf4e5;
+  --red: #c4453c;
+  --red-bg: #fbeeec;
+
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+  --fs-3xl: 34px;
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+
+  --shadow: 0 1px 2px rgba(11, 35, 28, 0.04), 0 4px 14px rgba(11, 35, 28, 0.05);
+
+  --sidebar-w: 232px;
+  --gutter: 16px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    'Hiragino Sans GB', sans-serif;
+  font-size: var(--fs-base);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--green-500);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

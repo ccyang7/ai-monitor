@@ -4,6 +4,16 @@ version = "0.1.0"
 description = "AI Monitor 后端服务"
 requires-python = ">=3.11"
 dependencies = [
+    "bcrypt>=5.0.0",
     "fastapi>=0.143.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.15.0",
+    "pyjwt>=2.13",
+    "sqlalchemy>=2.1.4",
     "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.0.0",
 ]

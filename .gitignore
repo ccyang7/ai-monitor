@@ -38,9 +38,12 @@ htmlcov/
 # ---------- 环境变量（敏感！） ----------
 # .env 里有数据库密码、模型 API Key —— 绝不能提交。
 # 提交的是 .env.example（模板，只含变量名不含真实值）。
+#
+# 用 .env.* 一把盖住，而不是逐个列 .env.local / .env.production：
+# 备份出来的 .env.bak、调试用的 .env.test 是同一个坑，逐个列一定会漏
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 
 # ---------- IDE / 编辑器 ----------
@@ -49,6 +52,15 @@ htmlcov/
 *.swp
 *.swo
 *~
+
+
+# ---------- Claude Code ----------
+# settings.local.json 是个人本机设置（权限白名单等），不该跟着仓库走。
+# settings.json（团队共享配置）不在这里忽略 —— 以后要加就提交它。
+# 注释这行是有意的：本机全局 git 配置里恰好也忽略了 settings.local.json，
+# 换个机器/换个人克隆就不生效了，所以项目自己的规则必须有
+.claude/settings.local.json
+.claude/worktrees/
 
 
 # ---------- 操作系统 ----------
@@ -60,6 +72,12 @@ Desktop.ini
 # ---------- 日志 ----------
 *.log
 logs/
+
+
+# ---------- 浏览器验证产物 ----------
+# 每次用 Playwright 跑回归都会往这里丢快照和截图，纯本机临时输出
+.playwright-mcp/
+
 
 
 # ---------- 前端（Node） ----------
