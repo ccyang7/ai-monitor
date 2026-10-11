@@ -77,6 +77,8 @@ logs/
 # ---------- 浏览器验证产物 ----------
 # 每次用 Playwright 跑回归都会往这里丢快照和截图，纯本机临时输出
 .playwright-mcp/
+# playwright-cli 的目录名比 playwright-mcp 少个 m，两个都留着免得换个工具就污染 git status
+.playwright-cli/
 
 
 

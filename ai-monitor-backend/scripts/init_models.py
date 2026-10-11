@@ -20,8 +20,16 @@ from app.models import Model  # noqa: E402
 BUILTIN_MODELS = [
     ("deepseek", "deepseek-chat", "1.000000", "2.000000"),
     ("deepseek", "deepseek-reasoner", "4.000000", "16.000000"),
+    # DeepSeek 官方对 v4-flash 是「缓存命中 / 未命中」两档价（0.2 / 1 元）。
+    # 本表只有 input_price 一个字段装不下两档，取未命中价 —— 代价是有缓存命中的调用
+    # 成本会被高估，宁可偏高也不低估（偏低会让人以为比实际便宜）
+    ("deepseek", "deepseek-v4-flash", "1.000000", "2.000000"),
     ("openai", "gpt-4o", "18.000000", "72.000000"),
     ("openai", "gpt-4o-mini", "1.100000", "4.400000"),
+    # 嵌入模型没有 output token，output_price 填 0 而非留空。input_price 的 0 是
+    # 真实价格（硅基流动免费版 bge-m3），不是没填 —— 它让成本列显示 ¥0.000，
+    # 含义是「这笔钱不是嵌入花的」，与模型名未收录时显示的「—」是两回事
+    ("siliconflow", "BAAI/bge-m3", "0.000000", "0.000000"),
 ]
 
 

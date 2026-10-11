@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/api/client'
 import { fetchLogDetail, fetchLogs } from '@/api/logs'
 import AppDrawer from '@/components/AppDrawer.vue'
+import JsonView from '@/components/JsonView.vue'
 import ProjectTabs from '@/components/ProjectTabs.vue'
 import { useProjectsStore } from '@/stores/projects'
 import {
@@ -12,6 +13,7 @@ import {
   formatLatency,
   formatNumber,
 } from '@/utils/format'
+import { tryParseJson } from '@/utils/json'
 import { HEALTH_LABEL, projectHealth } from '@/utils/project'
 import type { LogDetail, LogListItem, LogListParams } from '@/types/log'
 
@@ -60,6 +62,36 @@ const selectedId = ref<number | null>(null)
 const detail = ref<LogDetail | null>(null)
 const detailLoading = ref(false)
 const detailError = ref('')
+
+// 接入方经常把原始 JSON 直接上报（messages 数组、模型返回的结构化结果），
+// 探测出来就结构化渲染，探测不出（纯文本）保持原来的换行文本显示
+const inputJson = computed(() => tryParseJson(detail.value?.input))
+const outputJson = computed(() => tryParseJson(detail.value?.output))
+
+const copied = ref<'' | 'input' | 'output'>('')
+let copiedTimer: number | undefined
+
+// 复制的是原文而不是渲染后的内容：结构化视图会折叠长文本、吃掉引号，
+// 用户要粘到别处去比对时，那一份得跟数据库里的一模一样
+async function copyRaw(which: 'input' | 'output', text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // 从别的机器用 http://192.168.x.x 访问时不是安全上下文，clipboard API 直接不存在，
+    // 退回已经被废弃但哪儿都能用的 execCommand
+    const scratch = document.createElement('textarea')
+    scratch.value = text
+    scratch.style.position = 'fixed'
+    scratch.style.opacity = '0'
+    document.body.appendChild(scratch)
+    scratch.select()
+    document.execCommand('copy')
+    document.body.removeChild(scratch)
+  }
+  copied.value = which
+  window.clearTimeout(copiedTimer)
+  copiedTimer = window.setTimeout(() => (copied.value = ''), 1600)
+}
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
@@ -480,8 +512,20 @@ onMounted(load)
           <path d="M12 19V5M5 12l7-7 7 7" />
         </svg>
         用户提问
+        <button
+          v-if="detail.input"
+          type="button"
+          class="content-copy"
+          :class="{ 'is-done': copied === 'input' }"
+          @click="copyRaw('input', detail.input)"
+        >
+          {{ copied === 'input' ? '已复制' : '复制原文' }}
+        </button>
       </div>
-      <div v-if="detail.input" class="content-block">{{ detail.input }}</div>
+      <div v-if="detail.input" class="content-block" :class="{ 'is-json': inputJson !== undefined }">
+        <JsonView v-if="inputJson !== undefined" :data="inputJson" root />
+        <template v-else>{{ detail.input }}</template>
+      </div>
       <div v-else class="content-none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="round" stroke-linejoin="round">
@@ -497,8 +541,20 @@ onMounted(load)
           <path d="M12 5v14M5 12l7 7 7-7" />
         </svg>
         模型回答
+        <button
+          v-if="detail.output"
+          type="button"
+          class="content-copy"
+          :class="{ 'is-done': copied === 'output' }"
+          @click="copyRaw('output', detail.output)"
+        >
+          {{ copied === 'output' ? '已复制' : '复制原文' }}
+        </button>
       </div>
-      <div v-if="detail.output" class="content-block is-out">{{ detail.output }}</div>
+      <div v-if="detail.output" class="content-block is-out" :class="{ 'is-json': outputJson !== undefined }">
+        <JsonView v-if="outputJson !== undefined" :data="outputJson" root />
+        <template v-else>{{ detail.output }}</template>
+      </div>
       <div v-else class="content-none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="round" stroke-linejoin="round">
@@ -784,6 +840,36 @@ onMounted(load)
   color: var(--green-500);
 }
 
+/* 放在标题行右端而不是内容块里绝对定位：后者会压住内容的第一行。
+   静止时只有一行淡灰小字，悬停才浮出胶囊底色 —— 既看得见又不会喧宾夺主 */
+.content-copy {
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--faint);
+  /* button 默认不继承字体，不写这行会掉回浏览器的默认字体 */
+  font-family: inherit;
+  font-size: 11px;
+  /* 标题行是 640 的字重，按钮跟着变粗会像是标题的一部分 */
+  font-weight: 400;
+  line-height: 19px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.content-copy:hover,
+.content-copy.is-done {
+  border-color: var(--green-300);
+  background: var(--card);
+  color: var(--green-700);
+}
+
 .content-block {
   padding: 13px 15px;
   border-radius: var(--r-md);
@@ -801,6 +887,12 @@ onMounted(load)
 .content-block.is-out {
   background: var(--green-50);
   border-color: var(--green-100);
+}
+
+/* JsonView 自己管换行，pre-wrap 会把组件模板里的缩进也当成内容显示出来 */
+.content-block.is-json {
+  white-space: normal;
+  line-height: 1.65;
 }
 
 .content-block.is-error {

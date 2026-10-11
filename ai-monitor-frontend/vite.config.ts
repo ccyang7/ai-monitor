@@ -14,7 +14,9 @@ export default defineConfig({
     // 生产环境由 Nginx 做同样的转发，前端代码一行不用改
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // 端口是 8001 不是 8000：本机 8000 被另一个后端（KnowLo）占了，
+        // 两个后端都要同时跑，所以这里挪一位。后端启动也要跟着带 --port 8001
+        target: 'http://127.0.0.1:8001',
         changeOrigin: true,
       },
     },
