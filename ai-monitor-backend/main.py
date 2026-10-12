@@ -3,7 +3,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import auth, health, logs, projects, stats, users
+from app.api import anomaly, auth, health, logs, projects, stats, users
 from app.config import settings
 from app.exceptions import BusinessError
 
@@ -20,6 +20,8 @@ app.include_router(logs.router, prefix=settings.api_v1_prefix)
 app.include_router(logs.project_logs_router, prefix=settings.api_v1_prefix)
 # 统计接口同理，路径是 /projects/{project_id}/stats/...
 app.include_router(stats.router, prefix=settings.api_v1_prefix)
+# 异常列表也是 /projects/{project_id}/anomalies
+app.include_router(anomaly.router, prefix=settings.api_v1_prefix)
 
 
 @app.exception_handler(BusinessError)

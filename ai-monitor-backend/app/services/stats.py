@@ -9,6 +9,7 @@ from sqlalchemy import ColumnElement, Date, func, select
 from sqlalchemy.orm import Session
 
 from app.models import LLMRequest, Project
+from app.schemas.anomaly import AnomalyCounts
 from app.schemas.stats import (
     CostPoint,
     CostSummary,
@@ -24,7 +25,7 @@ from app.schemas.stats import (
 )
 
 
-def _conditions(
+def range_conditions(
     project_id: int, start: datetime, end: datetime
 ) -> tuple[ColumnElement[bool], ...]:
     # project_id 永远是第一个条件：漏掉它这个接口就成了读出全系统统计的黑洞
@@ -37,7 +38,7 @@ def _conditions(
     )
 
 
-def _bucket_expr(tz: str, granularity: Literal["day", "hour"]):
+def bucket_expr(tz: str, granularity: Literal["day", "hour"]):
     # 先转成目标时区的本地挂钟时间再截断。直接对 timestamptz 取日期是按数据库
     # 时区（UTC）截断的，UTC+8 的用户会看到「今天」的数据被切一半到昨天去
     local = LLMRequest.created_at.op("AT TIME ZONE")(tz)
@@ -105,7 +106,7 @@ def _summarize(db: Session, project_id: int, start: datetime, end: datetime):
             func.avg(LLMRequest.latency)
             .filter(LLMRequest.status == "success")
             .label("avg_latency"),
-        ).where(*_conditions(project_id, start, end))
+        ).where(*range_conditions(project_id, start, end))
     ).one()
 
 
@@ -130,14 +131,14 @@ def _bucketed_totals(
     granularity: Literal["day", "hour"],
 ) -> dict[date | datetime, tuple[int, Decimal]]:
     """按桶汇总「调用次数 + 某个数值列」。空桶不在这里补，由调用方按骨架填。"""
-    bucket = _bucket_expr(tz, granularity)
+    bucket = bucket_expr(tz, granularity)
     rows = db.execute(
         select(
             bucket.label("bucket"),
             func.count().label("calls"),
             func.coalesce(func.sum(value_column), 0).label("value"),
         )
-        .where(*_conditions(project_id, start, end))
+        .where(*range_conditions(project_id, start, end))
         .group_by(bucket)
         .order_by(bucket)
     ).all()
@@ -145,7 +146,15 @@ def _bucketed_totals(
     return {row.bucket: (row.calls, row.value) for row in rows}
 
 
-def get_overview(db: Session, project: Project, query: StatsQuery) -> OverviewOut:
+def get_overview(
+    db: Session,
+    project: Project,
+    query: StatsQuery,
+    anomaly_counts: AnomalyCounts,
+    baseline_available: bool,
+) -> OverviewOut:
+    # anomaly_counts 由调用方传入而不是在这里算：异常判定要反过来复用本模块的区间
+    # 与分桶表达式，写在这里就成了循环导入
     start, end = query.start_date, query.end_date
     prev_start, prev_end = _previous_period(start, end)
 
@@ -165,6 +174,8 @@ def get_overview(db: Session, project: Project, query: StatsQuery) -> OverviewOu
             cost=float(previous.cost),
             avg_latency=_avg_latency(previous.avg_latency),
         ),
+        anomaly_counts=anomaly_counts,
+        baseline_available=baseline_available,
     )
 
 
@@ -236,7 +247,7 @@ def get_model_stats(db: Session, project: Project, query: StatsQuery) -> ModelsO
             .filter(LLMRequest.status == "success")
             .label("avg_latency"),
         )
-        .where(*_conditions(project.id, query.start_date, query.end_date))
+        .where(*range_conditions(project.id, query.start_date, query.end_date))
         .group_by(LLMRequest.model)
         .order_by(func.count().desc(), LLMRequest.model)
     ).all()

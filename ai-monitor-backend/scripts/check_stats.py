@@ -209,7 +209,7 @@ def check_overview_summary() -> None:
     body = stats(token, pid, "overview", start_date=CUR_START, end_date=CUR_END)
 
     expect(
-        set(body.keys()) == {"summary", "previous", "anomaly_count"},
+        set(body.keys()) == {"summary", "previous", "anomaly_counts", "baseline_available"},
         f"overview 顶层字段变了：{sorted(body.keys())}",
     )
 
@@ -234,10 +234,19 @@ def check_overview_summary() -> None:
     expect_close(p["cost"], 2 * CHAT_COST, "环比区间成本")
     expect(p["avg_latency"] == 1000, f"环比平均响应应为 1000，实际 {p['avg_latency']}")
 
-    # 阶段 9 之前恒为 null，不能是 0 —— 前端靠这个区分「没异常」和「功能没做」
+    # 阶段 9 接上后这里是真实条数。断言四格全写死，同时锁住两件事：那条失败调用算得上
+    # error 类异常，以及另外三类都是 0 —— 本脚本的数据都在 9 月，落在「近 7 天」基线
+    # 窗口之外，基线样本数为 0，token / latency 本该一个都不判；error_rate 要凑满
+    # 10 次调用才判，那天也没那么多
     expect(
-        body["anomaly_count"] is None,
-        f"异常数在阶段 9 之前应是 null，实际 {body['anomaly_count']!r}",
+        body["anomaly_counts"] == {"token": 0, "latency": 0, "error": 1, "error_rate": 0},
+        f"异常数应只有那条失败调用，实际 {body['anomaly_counts']!r}",
+    )
+    # 基线不可用要说出来：四格里的 0 有「量过了是 0」和「还没开始量」两种含义，
+    # 前端只有拿到这个布尔值才分得清该说「没有异常」还是「样本还在攒」
+    expect(
+        body["baseline_available"] is False,
+        f"本脚本的数据全在基线窗口之外，应报基线不可用，实际 {body['baseline_available']!r}",
     )
 
 

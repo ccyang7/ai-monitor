@@ -24,6 +24,15 @@ class Settings(BaseSettings):
 
     max_projects_per_user: int = 3
 
+    # 异常判定阈值（设计 05 §2.1）。做成配置项而不是常量：不同项目对「异常」的容忍度
+    # 不同，改阈值不该重新部署。latency 的倍数比 token 低，是因为延迟的日常波动幅度小，
+    # 等到 5 倍才报的话，那时候早就慢得离谱了
+    token_anomaly_ratio: float = 5.0
+    latency_anomaly_ratio: float = 3.0
+    error_rate_threshold: float = 0.2
+    # 样本少于这个数就不判定 —— 两条历史记录算出来的「平均值」谁信谁误报
+    baseline_min_samples: int = 10
+
     # .env 按「启动目录」找，不是按本文件位置 —— 约定从 ai-monitor-backend/ 启动服务
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -9,6 +9,7 @@ from app.database import get_db
 from app.deps import get_own_project
 from app.models import Project
 from app.schemas.stats import CostsOut, ModelsOut, OverviewOut, StatsQuery, TokensOut
+from app.services import anomaly as anomaly_service
 from app.services import stats as stats_service
 
 # 全部挂在 /projects/{project_id}/stats/... 下：隔离由路径天然表达，
@@ -24,7 +25,14 @@ def get_overview(
     project: Project = Depends(get_own_project),
     db: Session = Depends(get_db),
 ) -> OverviewOut:
-    return stats_service.get_overview(db, project, query)
+    # 异常数在路由层组装，不写进 stats service：异常判定反过来复用了 stats 的
+    # 区间与分桶表达式，让 stats 反向依赖 anomaly 会成环
+    anomaly_counts, baseline_available = anomaly_service.count_anomalies(
+        db, project.id, query.start_date, query.end_date, query.tz
+    )
+    return stats_service.get_overview(
+        db, project, query, anomaly_counts, baseline_available
+    )
 
 
 @router.get("/{project_id}/stats/tokens", summary="Token 统计与趋势")
