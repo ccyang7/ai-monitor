@@ -9,12 +9,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import LLMRequest, Project
+from app.models import LLMRequest, Project, ProjectAnomalySettings
 from app.schemas.anomaly import (
     AnomalyCounts,
     AnomalyItem,
     AnomalyListOut,
     AnomalyQuery,
+    AnomalySettingField,
+    AnomalySettingsIn,
+    AnomalySettingsOut,
     AnomalyType,
     InsufficientBaseline,
 )
@@ -46,6 +49,53 @@ class _Baselines:
     ready: dict[str, tuple[float, float]]
     # (模型名, 已有样本数)
     insufficient: list[tuple[str, int]]
+
+
+@dataclass(frozen=True)
+class AnomalyThresholds:
+    """这次判定生效的三个阈值：项目自定义的优先，没设过就回落到 config.py 的默认值。
+
+    字段名与项目配置表的列名、config.py 的设置名三者一致，解析时就是
+    「这一列有值就用它，为空就取同名默认值」，不用来回对表。
+    """
+
+    token_anomaly_ratio: float
+    latency_anomaly_ratio: float
+    error_rate_threshold: float
+
+    @classmethod
+    def load(cls, db: Session, project_id: int) -> "AnomalyThresholds":
+        row = _settings_row(db, project_id)
+        # 逐项回落，不是整行二选一：可以只自定义其中一项，另两项继续跟随默认
+        return cls(
+            token_anomaly_ratio=_resolve_value(
+                row, "token_anomaly_ratio", settings.token_anomaly_ratio
+            ),
+            latency_anomaly_ratio=_resolve_value(
+                row, "latency_anomaly_ratio", settings.latency_anomaly_ratio
+            ),
+            error_rate_threshold=_resolve_value(
+                row, "error_rate_threshold", settings.error_rate_threshold
+            ),
+        )
+
+
+def _settings_row(
+    db: Session, project_id: int
+) -> ProjectAnomalySettings | None:
+    return db.execute(
+        select(ProjectAnomalySettings).where(
+            ProjectAnomalySettings.project_id == project_id
+        )
+    ).scalar_one_or_none()
+
+
+def _resolve_value(
+    row: ProjectAnomalySettings | None, column: str, default: float
+) -> float:
+    """NULL 表示这一项跟随默认 —— 这条规则只在这一个地方实现。"""
+    value = getattr(row, column) if row is not None else None
+    return float(default) if value is None else float(value)
 
 
 def _baselines(db: Session, project_id: int) -> _Baselines:
@@ -96,6 +146,7 @@ def _threshold_anomalies(
     start: datetime,
     end: datetime,
     baselines: dict[str, tuple[float, float]],
+    thresholds: AnomalyThresholds,
 ) -> list[_Anomaly]:
     if not baselines:
         return []
@@ -123,7 +174,10 @@ def _threshold_anomalies(
         avg_tokens, avg_latency = baselines[row.model]
 
         # 基线为 0 时跳过该类：0 的任意倍还是 0，比不出异常，硬算只会除零
-        if avg_tokens and row.total_tokens > avg_tokens * settings.token_anomaly_ratio:
+        if (
+            avg_tokens
+            and row.total_tokens > avg_tokens * thresholds.token_anomaly_ratio
+        ):
             found.append(
                 _Anomaly(
                     type="token",
@@ -136,7 +190,10 @@ def _threshold_anomalies(
                 )
             )
 
-        if avg_latency and row.latency > avg_latency * settings.latency_anomaly_ratio:
+        if (
+            avg_latency
+            and row.latency > avg_latency * thresholds.latency_anomaly_ratio
+        ):
             found.append(
                 _Anomaly(
                     type="latency",
@@ -181,7 +238,12 @@ def _error_anomalies(
 
 
 def _error_rate_anomalies(
-    db: Session, project_id: int, start: datetime, end: datetime, tz: str
+    db: Session,
+    project_id: int,
+    start: datetime,
+    end: datetime,
+    tz: str,
+    thresholds: AnomalyThresholds,
 ) -> list[_Anomaly]:
     # 只有这一类是窗口判定：看的是「这一天的整体错误比例」，不是某一次调用，
     # 所以 log_id 为 null、改给 window 标签（设计 05 §6.1）
@@ -203,7 +265,7 @@ def _error_rate_anomalies(
     found: list[_Anomaly] = []
     for row in rows:
         rate = row.errors / row.calls
-        if rate > settings.error_rate_threshold:
+        if rate > thresholds.error_rate_threshold:
             found.append(
                 _Anomaly(
                     type="error_rate",
@@ -211,8 +273,8 @@ def _error_rate_anomalies(
                     value=round(rate, 4),
                     # 窗口判定的 baseline 装的是阈值（0.2）而非滑动基线，
                     # 好让前端用同一套「实际值 vs 参考值」渲染两种形态
-                    baseline=settings.error_rate_threshold,
-                    ratio=round(rate / settings.error_rate_threshold, 1),
+                    baseline=thresholds.error_rate_threshold,
+                    ratio=round(rate / thresholds.error_rate_threshold, 1),
                     # 窗口起点的时刻。AT TIME ZONE 交回来的是当地墙钟值，先补回
                     # 时区信息再转 UTC —— 直接 replace 成 UTC 会整体差一个时区
                     created_at=datetime.combine(
@@ -227,11 +289,14 @@ def _error_rate_anomalies(
 def _detect(
     db: Session, project_id: int, start: datetime, end: datetime, tz: str
 ) -> tuple[list[_Anomaly], _Baselines]:
+    # 阈值查一次往下传，不让各个判定函数各自去读配置 —— 各读各的就会出现
+    # 同一份响应里两类异常用的是两套阈值
+    thresholds = AnomalyThresholds.load(db, project_id)
     baselines = _baselines(db, project_id)
     items = (
-        _threshold_anomalies(db, project_id, start, end, baselines.ready)
+        _threshold_anomalies(db, project_id, start, end, baselines.ready, thresholds)
         + _error_anomalies(db, project_id, start, end)
-        + _error_rate_anomalies(db, project_id, start, end, tz)
+        + _error_rate_anomalies(db, project_id, start, end, tz, thresholds)
     )
     # 基线可用与否只影响 token / latency 两类：失败调用和错误率不依赖基线，
     # 项目刚接入也能判出来
@@ -288,3 +353,55 @@ def count_anomalies(
         ),
         bool(baselines.ready),
     )
+
+
+def _field_state(
+    row: ProjectAnomalySettings | None, column: str, default: float
+) -> AnomalySettingField:
+    value = getattr(row, column) if row is not None else None
+    return AnomalySettingField(
+        value=_resolve_value(row, column, default),
+        default=float(default),
+        is_custom=value is not None,
+    )
+
+
+def get_settings(db: Session, project: Project) -> AnomalySettingsOut:
+    row = _settings_row(db, project.id)
+    return AnomalySettingsOut(
+        token_anomaly_ratio=_field_state(
+            row, "token_anomaly_ratio", settings.token_anomaly_ratio
+        ),
+        latency_anomaly_ratio=_field_state(
+            row, "latency_anomaly_ratio", settings.latency_anomaly_ratio
+        ),
+        error_rate_threshold=_field_state(
+            row, "error_rate_threshold", settings.error_rate_threshold
+        ),
+    )
+
+
+def save_settings(
+    db: Session, project: Project, payload: AnomalySettingsIn
+) -> AnomalySettingsOut:
+    row = _settings_row(db, project.id)
+    values = {
+        "token_anomaly_ratio": payload.token_anomaly_ratio,
+        "latency_anomaly_ratio": payload.latency_anomaly_ratio,
+        "error_rate_threshold": payload.error_rate_threshold,
+    }
+
+    if all(value is None for value in values.values()):
+        # 三项都跟随默认时这一行没有信息量：删掉而不是留一行全 NULL。
+        # 「没有行」和「全 NULL」在判定时等价，留着只会让表里攒一堆空壳
+        if row is not None:
+            db.delete(row)
+    elif row is not None:
+        for column, value in values.items():
+            setattr(row, column, value)
+    else:
+        db.add(ProjectAnomalySettings(project_id=project.id, **values))
+
+    db.commit()
+    # 返回保存后的完整状态，前端不用再补一次 GET
+    return get_settings(db, project)

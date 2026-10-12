@@ -82,3 +82,33 @@ class AnomalyListOut(BaseModel):
 
     # 只列样本不足的模型：达标的不需要提示，全列出来等于让前端自己筛
     insufficient_baselines: list[InsufficientBaseline]
+
+
+class AnomalySettingField(BaseModel):
+    """一项阈值的三条信息：生效值、系统默认值、这个项目有没有自己设过。
+
+    默认值也要给出来 —— 界面要显示「跟随默认（5×）」，光有生效值说不出
+    「跟随默认」和「正好被设成了默认值」的区别。
+    """
+
+    value: float
+    default: float
+    is_custom: bool
+
+
+class AnomalySettingsOut(BaseModel):
+    token_anomaly_ratio: AnomalySettingField
+    latency_anomaly_ratio: AnomalySettingField
+    error_rate_threshold: AnomalySettingField
+
+
+class AnomalySettingsIn(BaseModel):
+    """三个阈值都可空：null = 这一项跟随系统默认（前端「跟随默认」开关打开时传 null）。
+
+    范围与 003 脚本里的 CHECK 约束一致，两处要一起改 ——
+    不一致时要么接口放行、数据库报错，要么反过来接口拦掉、数据库其实允许。
+    """
+
+    token_anomaly_ratio: float | None = Field(None, ge=1.5, le=20)
+    latency_anomaly_ratio: float | None = Field(None, ge=1.5, le=20)
+    error_rate_threshold: float | None = Field(None, ge=0.05, le=1.0)

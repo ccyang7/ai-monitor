@@ -7,6 +7,7 @@ from app.models.base import Base, TimestampMixin
 from app.models.llm_request import LLMRequest
 from app.models.model import Model
 from app.models.project import Project
+from app.models.project_anomaly_settings import ProjectAnomalySettings
 from app.models.user import User
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "LLMRequest",
     "Model",
     "Project",
+    "ProjectAnomalySettings",
     "TimestampMixin",
     "User",
 ]

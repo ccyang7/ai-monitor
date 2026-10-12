@@ -93,8 +93,8 @@ def reset_db() -> None:
     with test_engine.begin() as conn:
         conn.execute(
             text(
-                "TRUNCATE users, projects, api_keys, models, llm_requests"
-                " RESTART IDENTITY CASCADE"
+                "TRUNCATE users, projects, api_keys, models, llm_requests,"
+                " project_anomaly_settings RESTART IDENTITY CASCADE"
             )
         )
         for provider, name, input_price, output_price in BUILTIN_MODELS:
@@ -202,6 +202,42 @@ def anomalies(token: str, project_id: int, **params) -> dict:
 def make_project(token: str, name: str) -> tuple[int, str]:
     created = new_project(token, name)
     return created["id"], created["api_key"]
+
+
+def settings(token: str, project_id: int) -> dict:
+    r = client.get(
+        f"/api/v1/projects/{project_id}/anomaly-settings", headers=auth(token)
+    )
+    expect(r.status_code == 200, f"读异常标准应返回 200，实际 {r.status_code}：{r.text}")
+    return r.json()
+
+
+def save_settings(token: str, project_id: int, payload: dict) -> dict:
+    r = client.put(
+        f"/api/v1/projects/{project_id}/anomaly-settings",
+        headers=auth(token),
+        json=payload,
+    )
+    expect(r.status_code == 200, f"保存异常标准应返回 200，实际 {r.status_code}：{r.text}")
+    return r.json()
+
+
+def settings_row_count(project_id: int) -> int:
+    """直接查库，确认「三项都跟随默认时不留空行」是数据库里的事实，不只是接口的说法。"""
+    with test_engine.begin() as conn:
+        return conn.execute(
+            text(
+                "SELECT count(*) FROM project_anomaly_settings WHERE project_id = :pid"
+            ),
+            {"pid": project_id},
+        ).scalar_one()
+
+
+DEFAULT_SETTINGS = {
+    "token_anomaly_ratio": {"value": 5.0, "default": 5.0, "is_custom": False},
+    "latency_anomaly_ratio": {"value": 3.0, "default": 3.0, "is_custom": False},
+    "error_rate_threshold": {"value": 0.2, "default": 0.2, "is_custom": False},
+}
 
 
 def check_token_anomaly() -> None:
@@ -661,6 +697,215 @@ def check_empty_project() -> None:
     expect(body["insufficient_baselines"] == [], "没有任何模型时该是空清单")
 
 
+def check_settings_defaults() -> None:
+    """没设过的项目：三项都报默认值，且都标着「不是自定义」。"""
+    token = register_and_login("alice")
+    pid, _key = make_project(token, "默认标准")
+
+    expect(
+        settings(token, pid) == DEFAULT_SETTINGS,
+        f"没设过时三项都该是默认值：{settings(token, pid)}",
+    )
+    expect(settings_row_count(pid) == 0, "没设过的项目不该有配置行")
+
+
+def check_settings_partial_save() -> None:
+    """只改一项、另两项传 null：只有改的那项算自定义，其余继续跟随默认。"""
+    token = register_and_login("alice")
+    pid, _key = make_project(token, "只改一项")
+
+    saved = save_settings(
+        token,
+        pid,
+        {
+            "token_anomaly_ratio": 8.0,
+            "latency_anomaly_ratio": None,
+            "error_rate_threshold": None,
+        },
+    )
+    expect(
+        saved["token_anomaly_ratio"]
+        == {"value": 8.0, "default": 5.0, "is_custom": True},
+        f"改了的那项该是自定义：{saved['token_anomaly_ratio']}",
+    )
+    expect(
+        saved["latency_anomaly_ratio"] == DEFAULT_SETTINGS["latency_anomaly_ratio"],
+        f"没改的项该继续跟随默认：{saved['latency_anomaly_ratio']}",
+    )
+
+    # 库里必须存着「一个值 + 两个 NULL」，而不是把默认值抄一份进去 ——
+    # 抄一份的话，config.py 改默认值时这个项目就再也跟着变了
+    with test_engine.begin() as conn:
+        row = conn.execute(
+            text(
+                "SELECT token_anomaly_ratio, latency_anomaly_ratio,"
+                " error_rate_threshold FROM project_anomaly_settings"
+                " WHERE project_id = :pid"
+            ),
+            {"pid": pid},
+        ).one()
+    expect(row[0] == 8.0, f"库里的 Token 倍数应是 8.0，实际 {row[0]!r}")
+    expect(
+        row[1] is None and row[2] is None,
+        f"没改的两项库里该是 NULL，实际 {row[1]!r} / {row[2]!r}",
+    )
+    expect(settings(token, pid) == saved, "回读的异常标准与保存后返回的不一致")
+
+
+def check_custom_token_threshold() -> None:
+    """调低 Token 倍数，历史数据不做任何迁移就按新标准重判。"""
+    token = register_and_login("alice")
+    pid, key = make_project(token, "自定义阈值")
+
+    seed_baseline(key)  # 基线 1000 token / 1000ms
+    seed_logs(
+        key,
+        [
+            # 2.5 倍：默认 5 倍下不报，调到 2 倍后才该报
+            _call(2500, BASE_LATENCY, PERIOD_START + timedelta(hours=1)),
+            _call(6000, BASE_LATENCY, PERIOD_START + timedelta(hours=2)),
+        ],
+    )
+
+    before = anomalies(token, pid, start_date=PERIOD_START, end_date=PERIOD_END)
+    expect(before["total"] == 1, f"默认 5 倍下只该报 1 条，实际 {before['total']}")
+
+    save_settings(
+        token,
+        pid,
+        {
+            "token_anomaly_ratio": 2.0,
+            "latency_anomaly_ratio": None,
+            "error_rate_threshold": None,
+        },
+    )
+
+    after = anomalies(token, pid, start_date=PERIOD_START, end_date=PERIOD_END)
+    expect(after["total"] == 2, f"调到 2 倍后两条都该报，实际 {after['total']}")
+    expect(
+        {item["ratio"] for item in after["items"]} == {2.5, 6.0},
+        f"两条的倍数应是 2.5 与 6.0：{[i['ratio'] for i in after['items']]}",
+    )
+
+
+def check_custom_error_rate_threshold() -> None:
+    """窗口错误率读的是项目阈值，不再只看全局默认。"""
+    token = register_and_login("alice")
+    pid, key = make_project(token, "自定义错误率")
+
+    base = (PERIOD_START + timedelta(days=1)).replace(
+        hour=2, minute=0, second=0, microsecond=0
+    )
+    # 12 条里错 2 条 = 16.7%
+    seed_logs(
+        key,
+        [
+            _call(
+                BASE_TOKENS,
+                BASE_LATENCY,
+                base + timedelta(minutes=i),
+                "error" if i < 2 else "success",
+            )
+            for i in range(12)
+        ],
+    )
+
+    before = anomalies(token, pid, start_date=PERIOD_START, end_date=PERIOD_END)
+    expect(
+        [item for item in before["items"] if item["type"] == "error_rate"] == [],
+        "16.7% 没超默认的 20%，不该报警",
+    )
+
+    save_settings(
+        token,
+        pid,
+        {
+            "token_anomaly_ratio": None,
+            "latency_anomaly_ratio": None,
+            "error_rate_threshold": 0.1,
+        },
+    )
+
+    after = anomalies(token, pid, start_date=PERIOD_START, end_date=PERIOD_END)
+    windows = [item for item in after["items"] if item["type"] == "error_rate"]
+    expect(len(windows) == 1, f"阈值调到 10% 后该报 1 条窗口异常，实际 {len(windows)}")
+    expect(
+        windows[0]["baseline"] == 0.1,
+        f"窗口项的参考值该跟着变成项目阈值 0.1，实际 {windows[0]['baseline']}",
+    )
+    expect(windows[0]["ratio"] == 1.7, f"0.167 / 0.1 应约为 1.7，实际 {windows[0]['ratio']}")
+
+
+def check_settings_reset() -> None:
+    """三项都跟随默认时不留空行；PUT 是整体替换，空对象等于全部恢复默认。"""
+    token = register_and_login("alice")
+    pid, _key = make_project(token, "恢复默认")
+
+    save_settings(
+        token,
+        pid,
+        {
+            "token_anomaly_ratio": 8.0,
+            "latency_anomaly_ratio": 4.0,
+            "error_rate_threshold": 0.5,
+        },
+    )
+    expect(settings_row_count(pid) == 1, "保存后库里该有一行")
+
+    reset = save_settings(
+        token,
+        pid,
+        {
+            "token_anomaly_ratio": None,
+            "latency_anomaly_ratio": None,
+            "error_rate_threshold": None,
+        },
+    )
+    expect(reset == DEFAULT_SETTINGS, f"恢复默认后三项都该回到默认值：{reset}")
+    expect(settings_row_count(pid) == 0, "三项都跟随默认时不该留一行全 NULL")
+
+    save_settings(token, pid, {"token_anomaly_ratio": 6.0})
+    expect(settings_row_count(pid) == 1, "只传一项时该按这一项建行")
+
+    # 空对象 = 三项都缺省 = 全跟随默认。PUT 是整体替换，不是「只改传来的那些字段」
+    # （那是 PATCH 的语义）—— 用错的人会以为只改了一项，结果把别的都清了
+    save_settings(token, pid, {})
+    expect(settings_row_count(pid) == 0, "空对象的 PUT 等于全部恢复默认")
+
+
+def check_settings_validation() -> None:
+    """越界 422（不能漏到数据库 CHECK 变成 500）；越权 / 不存在 404；未登录 401。"""
+    alice = register_and_login("alice")
+    bob = register_and_login("bob")
+    pid, _key = make_project(alice, "标准校验")
+
+    url = f"/api/v1/projects/{pid}/anomaly-settings"
+    cases = [
+        ("Token 倍数低于下限", {"token_anomaly_ratio": 1.0}),
+        ("Token 倍数高于上限", {"token_anomaly_ratio": 21}),
+        ("延迟倍数低于下限", {"latency_anomaly_ratio": 0.5}),
+        ("错误率低于下限", {"error_rate_threshold": 0.01}),
+        ("错误率高于上限", {"error_rate_threshold": 1.5}),
+        ("错误率写成 0", {"error_rate_threshold": 0}),
+    ]
+    for name, payload in cases:
+        r = client.put(url, headers=auth(alice), json=payload)
+        expect(r.status_code == 422, f"{name} 应 422，实际 {r.status_code}：{r.text}")
+
+    # 越权一律 404，与「项目不存在」不可区分
+    r = client.get(url, headers=auth(bob))
+    expect(r.status_code == 404, f"读别人的异常标准应 404，实际 {r.status_code}")
+    r = client.put(url, headers=auth(bob), json={"token_anomaly_ratio": 8.0})
+    expect(r.status_code == 404, f"改别人的异常标准应 404，实际 {r.status_code}")
+    expect(settings_row_count(pid) == 0, "越权的写入不能落库")
+
+    r = client.get("/api/v1/projects/999999/anomaly-settings", headers=auth(alice))
+    expect(r.status_code == 404, f"不存在的项目应 404，实际 {r.status_code}")
+
+    r = client.get(url)
+    expect(r.status_code == 401, f"未登录应 401，实际 {r.status_code}")
+
+
 def check_isolation() -> None:
     """★ 用户隔离：别人的项目、不存在的项目、没登录，一律 404 / 401。"""
     alice = register_and_login("alice")
@@ -733,6 +978,12 @@ CHECKS = [
     ("概览的 anomaly_counts 逐类与异常列表对得上", check_overview_count_matches),
     ("窗口时区：同一批记录在 UTC 与 +08:00 落到不同的天", check_timezone_window),
     ("空项目：0 条 + 基线不可用", check_empty_project),
+    ("异常标准：没设过时三项都报默认值", check_settings_defaults),
+    ("异常标准：只改一项，另两项库里存 NULL 继续跟随默认", check_settings_partial_save),
+    ("异常标准：调低 Token 倍数，历史判定立刻重判", check_custom_token_threshold),
+    ("异常标准：窗口错误率读项目阈值，参考值跟着变", check_custom_error_rate_threshold),
+    ("异常标准：恢复默认删掉那一行，PUT 是整体替换", check_settings_reset),
+    ("异常标准：越界 422、越权 404、未登录 401", check_settings_validation),
     ("★ 用户隔离：跨项目 404、不存在 404、未登录 401", check_isolation),
     ("参数校验（422 而不是 500）", check_validation),
 ]
@@ -788,7 +1039,7 @@ def main() -> int:
         return 1
 
     print(f"全部通过 ✅ {len(CHECKS)}/{len(CHECKS)}")
-    print("阶段 9 异常分析完成 —— 基线判定、失败调用与窗口错误率都已就位")
+    print("阶段 9 异常分析完成 —— 基线判定、失败调用、窗口错误率与项目级自定义标准都已就位")
     return 0
 
 
