@@ -39,7 +39,9 @@ def _build_conditions(project: Project, query: LogListQuery) -> list[ColumnEleme
     if query.start_date is not None:
         conditions.append(LLMRequest.created_at >= query.start_date)
     if query.end_date is not None:
-        conditions.append(LLMRequest.created_at <= query.end_date)
+        # 左闭右开，与 stats 接口同一套语义：前端传「次日 0 点」，后端用 < 正好含满当天。
+        # 若改成前端传 23:59:59.999 + 后端 <=，那一毫秒到午夜之间的记录会被漏掉
+        conditions.append(LLMRequest.created_at < query.end_date)
     if query.min_tokens is not None:
         conditions.append(LLMRequest.total_tokens >= query.min_tokens)
     if query.max_tokens is not None:

@@ -7,9 +7,16 @@ const route = useRoute()
 </script>
 
 <template>
-  <!-- 只放已经做出来的子页：概览、Token、成本这些等对应页面做完了再往这里加，
+  <!-- 只放已经做出来的子页：Token、成本这些等对应页面做完了再往这里加，
        摆一个点了没反应的入口比不摆更糟 -->
   <nav class="tabs">
+    <RouterLink
+      class="tab"
+      :class="{ 'is-on': route.name === 'project-overview' }"
+      :to="{ name: 'project-overview', params: { projectId } }"
+    >
+      概览
+    </RouterLink>
     <RouterLink
       class="tab"
       :class="{ 'is-on': route.name === 'project-logs' }"

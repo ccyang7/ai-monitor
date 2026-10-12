@@ -304,12 +304,13 @@ def check_filters() -> None:
         ("只按状态 success", {"status": "success"}, 3),
         ("只按状态 error", {"status": "error"}, 1),
         ("只按开始时间（09-03 起）", {"start_date": BASE + timedelta(days=2)}, 2),
-        ("只按结束时间（09-02 止）", {"end_date": BASE + timedelta(days=1)}, 2),
+        # 左闭右开：end 正好落在 09-02 那条记录上，它不该被包含进来，只剩 09-01
+        ("只按结束时间（09-02 之前）", {"end_date": BASE + timedelta(days=1)}, 1),
         (
-            "时间区间 09-02 ~ 09-03",
+            "时间区间 09-02 ~ 09-03（左闭右开）",
             {
                 "start_date": BASE + timedelta(days=1),
-                "end_date": BASE + timedelta(days=2),
+                "end_date": BASE + timedelta(days=3),
             },
             2,
         ),
@@ -560,9 +561,11 @@ def check_timezone() -> None:
     at = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
     seed_logs(key, [{"timestamp": at.isoformat()}])
 
-    # 不带时区的 end_date 按 UTC 解释 → 与日志时间相等，应命中。
-    # 若被按本机时区（UTC+8）解释，end 会变成 08-31T16:00Z，这条就查不到了
-    body = query_logs(token, pid, end_date=datetime(2026, 9, 1, 0, 0))
+    # 不带时区的 end_date 按 UTC 解释 → 比日志时间晚 1 秒，应命中。
+    # 若被按本机时区（UTC+8）解释，end 会变成 08-31T16:00:01Z，这条就查不到了。
+    # 取「晚 1 秒」而不是「正好相等」：相等是左闭右开的边界，那是另一件事，
+    # 混在一起的话这条用例挂了会分不清是时区算错还是边界算错
+    body = query_logs(token, pid, end_date=datetime(2026, 9, 1, 0, 0, 1))
     expect(
         body["total"] == 1,
         f"不带时区的 end_date 应按 UTC 解释，此类请求应命中 1 条，实际 {body['total']}",

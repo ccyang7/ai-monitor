@@ -4,8 +4,9 @@ import { extractErrorMessage } from '@/api/client'
 import { fetchLogDetail, fetchLogs } from '@/api/logs'
 import AppDrawer from '@/components/AppDrawer.vue'
 import JsonView from '@/components/JsonView.vue'
+import ProjectHeader from '@/components/ProjectHeader.vue'
 import ProjectTabs from '@/components/ProjectTabs.vue'
-import { useProjectsStore } from '@/stores/projects'
+import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import {
   formatCost,
   formatDateTime,
@@ -14,21 +15,15 @@ import {
   formatNumber,
 } from '@/utils/format'
 import { tryParseJson } from '@/utils/json'
-import { HEALTH_LABEL, projectHealth } from '@/utils/project'
+import { ALL_TIME, buildTimeRange, rangeError } from '@/utils/timerange'
+import type { TimeRangeValue } from '@/utils/timerange'
 import type { LogDetail, LogListItem, LogListParams } from '@/types/log'
 
 const props = defineProps<{ projectId: string }>()
 
-const projects = useProjectsStore()
-
 const projectId = computed(() => Number(props.projectId))
-// 页头要的项目名、技术栈已经在侧边栏那份列表里了，不必再单独拉一次
-const project = computed(
-  () => projects.items.find((item) => item.id === projectId.value) ?? null,
-)
 
 const PAGE_SIZE = 20
-const DAY_MS = 24 * 60 * 60 * 1000
 
 const TOKEN_RANGES: Record<string, { min?: number; max?: number }> = {
   lt1k: { max: 999 },
@@ -39,11 +34,12 @@ const TOKEN_RANGES: Record<string, { min?: number; max?: number }> = {
 const filters = reactive({
   model: '',
   status: '' as '' | 'success' | 'error',
-  range: '' as '' | 'today' | '7d' | '30d' | 'custom',
-  customStart: '',
-  customEnd: '',
   tokens: '' as '' | 'lt1k' | '1k-10k' | 'gt10k',
 })
+
+// 时间范围单独拿着：它和上面的下拉不是一类东西 —— 值是结构化的区间，
+// 而且概览页要用同一个选择器，两边必须是同一份换算逻辑
+const range = ref<TimeRangeValue>({ ...ALL_TIME })
 
 // 搜索词单独拿着而不是并进 filters：它是逐字变化的，和其他条件不是同一种节奏
 const keyword = ref('')
@@ -99,20 +95,10 @@ const hasFilter = computed(() =>
   Boolean(
     filters.model ||
       filters.status ||
-      filters.range ||
+      range.value.preset ||
       filters.tokens ||
       keyword.value.trim(),
   ),
-)
-
-// 两个日期填反了就是个无效范围，发出去后端会回 422，而 422 的报错对用户没有意义，这里先拦下来
-const rangeError = computed(() =>
-  filters.range === 'custom' &&
-  filters.customStart &&
-  filters.customEnd &&
-  filters.customStart > filters.customEnd
-    ? '结束日期不能早于开始日期'
-    : '',
 )
 
 const visiblePages = computed<(number | '…')[]>(() => {
@@ -130,25 +116,6 @@ const visiblePages = computed<(number | '…')[]>(() => {
   return pages
 })
 
-// 只写 "2026-10-01" 的话浏览器会按 UTC 零点解析，必须补上时间部分才是本地时间
-function parseLocalDate(value: string): Date {
-  return new Date(`${value}T00:00:00`)
-}
-
-// 后端把「不带时区的时间」当 UTC，所以本地时间要先转成带时区的 ISO 再发，
-// 直接发明文的话，「今天 00:00」会被当成 UTC 的今天 00:00，整体偏 8 小时
-function localDayStart(date: Date): string {
-  const start = new Date(date)
-  start.setHours(0, 0, 0, 0)
-  return start.toISOString()
-}
-
-function localDayEnd(date: Date): string {
-  const end = new Date(date)
-  end.setHours(23, 59, 59, 999)
-  return end.toISOString()
-}
-
 function buildParams(): LogListParams {
   const params: LogListParams = { page: page.value, page_size: PAGE_SIZE }
 
@@ -160,20 +127,11 @@ function buildParams(): LogListParams {
   if (tokenRange?.min !== undefined) params.min_tokens = tokenRange.min
   if (tokenRange?.max !== undefined) params.max_tokens = tokenRange.max
 
-  const today = new Date()
-  if (filters.range === 'today') {
-    params.start_date = localDayStart(today)
-  } else if (filters.range === '7d') {
-    params.start_date = localDayStart(new Date(today.getTime() - 6 * DAY_MS))
-  } else if (filters.range === '30d') {
-    params.start_date = localDayStart(new Date(today.getTime() - 29 * DAY_MS))
-  } else if (filters.range === 'custom') {
-    if (filters.customStart) {
-      params.start_date = localDayStart(parseLocalDate(filters.customStart))
-    }
-    if (filters.customEnd) {
-      params.end_date = localDayEnd(parseLocalDate(filters.customEnd))
-    }
+  // 换算成年月日之外的绝对时刻是 utils/timerange 的事，这里只管把结果拼进参数
+  const query = buildTimeRange(range.value)
+  if (query) {
+    params.start_date = query.start_date
+    params.end_date = query.end_date
   }
 
   return params
@@ -184,7 +142,7 @@ async function load(): Promise<void> {
     loadError.value = '项目地址不正确'
     return
   }
-  if (rangeError.value) return
+  if (rangeError(range.value)) return
 
   loading.value = true
   loadError.value = ''
@@ -212,11 +170,11 @@ function scheduleReload(): void {
 }
 
 // 条件变了就回到第一页：停在第 3 页再换一个只有一页结果的条件，看到的会是一片空白
-watch([filters, keyword], () => {
+watch([filters, range, keyword], () => {
   page.value = 1
 })
 
-watch([filters, keyword, page], scheduleReload)
+watch([filters, range, keyword, page], scheduleReload)
 
 function goPage(target: number | '…'): void {
   if (typeof target !== 'number') return
@@ -227,10 +185,8 @@ function goPage(target: number | '…'): void {
 function resetFilters(): void {
   filters.model = ''
   filters.status = ''
-  filters.range = ''
-  filters.customStart = ''
-  filters.customEnd = ''
   filters.tokens = ''
+  range.value = { ...ALL_TIME }
   keyword.value = ''
   page.value = 1
   // 条件和页码都由上面的 watch 兜着发请求，本来就没条件可清时它也不会触发，无需额外处理
@@ -266,34 +222,7 @@ onMounted(load)
 </script>
 
 <template>
-  <header class="page-head">
-    <div>
-      <RouterLink class="crumb" :to="{ name: 'home' }">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M15 6l-6 6 6 6" />
-        </svg>
-        我的项目
-      </RouterLink>
-
-      <div class="head-line">
-        <h1 class="page-title">{{ project?.name ?? '调用日志' }}</h1>
-        <span v-if="project?.tech_stack" class="tag is-mute">{{ project.tech_stack }}</span>
-        <span
-          v-if="project"
-          class="tag"
-          :class="{
-            'is-warn': projectHealth(project) === 'alert',
-            'is-mute': projectHealth(project) === 'unknown',
-          }"
-        >
-          <span class="dot" />
-          {{ HEALTH_LABEL[projectHealth(project)] }}
-        </span>
-      </div>
-    </div>
-  </header>
-
+  <ProjectHeader :project-id="projectId" fallback-title="调用日志" />
   <ProjectTabs :project-id="projectId" />
 
   <section class="filters">
@@ -308,19 +237,7 @@ onMounted(load)
       <option value="error">失败</option>
     </select>
 
-    <select v-model="filters.range" class="filter-select" aria-label="按时间范围筛选">
-      <option value="">全部时间</option>
-      <option value="today">今日</option>
-      <option value="7d">近 7 天</option>
-      <option value="30d">近 30 天</option>
-      <option value="custom">自定义范围</option>
-    </select>
-
-    <template v-if="filters.range === 'custom'">
-      <input v-model="filters.customStart" class="filter-date" type="date" aria-label="开始日期" />
-      <span class="filter-dash">至</span>
-      <input v-model="filters.customEnd" class="filter-date" type="date" aria-label="结束日期" />
-    </template>
+    <TimeRangePicker v-model="range" allow-all />
 
     <select v-model="filters.tokens" class="filter-select" aria-label="按 Token 范围筛选">
       <option value="">Token 不限</option>
@@ -339,8 +256,6 @@ onMounted(load)
     </div>
 
     <button class="btn btn-ghost btn-sm" type="button" @click="resetFilters">重置</button>
-
-    <p v-if="rangeError" class="filter-error">{{ rangeError }}</p>
   </section>
 
   <section class="card">
@@ -568,61 +483,7 @@ onMounted(load)
 </template>
 
 <style scoped>
-.head-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-/* --- 筛选栏 ---
-   包成白卡：筛选器散在页面底色上时会和下面的表格糊成一片，
-   "这是可以操作的一组条件"读不出来 */
-
-.filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 15px 18px;
-  margin-bottom: var(--gutter);
-  background: var(--card);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow);
-}
-
-.filter-select,
-.filter-date {
-  appearance: none;
-  padding: 9px 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background-color: var(--card);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  color: var(--text);
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.filter-select {
-  padding-right: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7F76' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 11px center;
-}
-
-.filter-select:focus,
-.filter-date:focus {
-  outline: none;
-  border-color: var(--green-400);
-  box-shadow: 0 0 0 3px var(--green-50);
-}
-
-.filter-dash {
-  color: var(--faint);
-  font-size: var(--fs-sm);
-}
+/* 搜索框是这一页专有的（模型 / 状态 / 时间 / Token 那几个控件已经抽成通用类了） */
 
 .filter-search {
   position: relative;
@@ -662,12 +523,6 @@ onMounted(load)
   height: 15px;
   color: var(--faint);
   pointer-events: none;
-}
-
-.filter-error {
-  flex: 1 0 100%;
-  color: var(--red);
-  font-size: var(--fs-xs);
 }
 
 /* --- 表格 --- */

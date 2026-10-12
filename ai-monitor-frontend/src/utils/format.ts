@@ -30,6 +30,15 @@ export function formatNumber(value: number): string {
   return value.toLocaleString('zh-CN')
 }
 
+// 大数字的短写法，给图表轴标签和指标卡用：155,071 挤在轴上会把网格吃掉一半。
+// 用「万 / 亿」而不是 k / M —— 中文语境下 15.5万 比 155k 好读
+export function formatCompact(value: number): string {
+  const abs = Math.abs(value)
+  if (abs >= 100_000_000) return `${(value / 100_000_000).toFixed(1)}亿`
+  if (abs >= 10_000) return `${(value / 10_000).toFixed(1)}万`
+  return formatNumber(value)
+}
+
 // 毫秒和秒混在一张表里读起来很乱，统一成「不足 1 秒看毫秒，超过就看秒」
 export function formatLatency(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`

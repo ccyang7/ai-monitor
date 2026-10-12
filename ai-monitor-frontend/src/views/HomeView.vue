@@ -104,7 +104,7 @@ async function submitCreate(): Promise<void> {
       v-for="project in projects.items"
       :key="project.id"
       class="project"
-      :to="{ name: 'project-settings', params: { projectId: project.id } }"
+      :to="{ name: 'project-overview', params: { projectId: project.id } }"
     >
       <div class="project-top">
         <div class="project-name">{{ project.name }}</div>

@@ -67,7 +67,7 @@ function logout(): void {
             :key="project.id"
             class="nav-item"
             :class="{ 'is-active': project.id === activeProjectId }"
-            :to="{ name: 'project-settings', params: { projectId: project.id } }"
+            :to="{ name: 'project-overview', params: { projectId: project.id } }"
           >
             <span class="dot" :style="{ color: HEALTH_COLOR[projectHealth(project)] }" />
             <span class="nav-text">{{ project.name }}</span>

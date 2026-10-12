@@ -14,7 +14,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/HomeView.vue'),
   },
   {
-    // 项目下的子页，靠 ProjectTabs 互相切换；概览页做出来之后会补成 /projects/:id
+    // 项目下的子页，靠 ProjectTabs 互相切换。概览是这个项目的落地页，
+    // 侧边栏和首页的项目入口都指向它
+    path: '/projects/:projectId',
+    name: 'project-overview',
+    component: () => import('@/views/ProjectOverviewView.vue'),
+    props: true,
+  },
+  {
     path: '/projects/:projectId/logs',
     name: 'project-logs',
     component: () => import('@/views/ProjectLogsView.vue'),

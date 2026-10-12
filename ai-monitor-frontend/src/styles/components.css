@@ -240,6 +240,9 @@
   align-items: center;
   gap: 10px;
   flex: none;
+  flex-wrap: wrap;
+  /* 时间范围的校验提示占满一行时别把页头往上顶 */
+  justify-content: flex-end;
 }
 
 .crumb {
@@ -491,6 +494,65 @@
 
 .input.is-invalid {
   border-color: #e8c4c0;
+}
+
+/* --- 筛选栏 ---
+   包成白卡：筛选器散在页面底色上时会和下面的表格糊成一片，
+   "这是可以操作的一组条件"读不出来 */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 18px;
+  margin-bottom: var(--gutter);
+  background: var(--card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+}
+
+.filter-select,
+.filter-date {
+  appearance: none;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background-color: var(--card);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.filter-select {
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7F76' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+.filter-select:focus,
+.filter-date:focus {
+  outline: none;
+  border-color: var(--green-400);
+  box-shadow: 0 0 0 3px var(--green-50);
+}
+
+.filter-date.is-invalid {
+  border-color: #e8c4c0;
+}
+
+.filter-dash {
+  color: var(--faint);
+  font-size: var(--fs-sm);
+}
+
+.filter-error {
+  flex: 1 0 100%;
+  color: var(--red);
+  font-size: var(--fs-xs);
 }
 
 /* --- 表格 --- */
