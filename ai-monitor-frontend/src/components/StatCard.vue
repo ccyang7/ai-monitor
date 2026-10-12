@@ -6,12 +6,21 @@ defineProps<{
   delta?: string
   deltaDir?: 'up' | 'down' | 'flat' | 'none'
   hint?: string
+  // 状态角标。文案和颜色都由页面定，组件只管画 —— 每张卡该挂什么话
+  // 取决于它对应哪一类异常，那是页面才知道的事。
+  // 不传就整块不渲染：没有话可说时不挂一个「正常」，别给没检测过的指标发合格证
+  chip?: { text: string; tone: 'warn' | 'bad' | 'mute' } | null
 }>()
 </script>
 
 <template>
   <div class="stat">
-    <div class="stat-label">{{ label }}</div>
+    <div class="stat-top">
+      <span class="stat-label">{{ label }}</span>
+      <span v-if="chip" class="stat-chip" :class="`is-${chip.tone}`">
+        {{ chip.text }}
+      </span>
+    </div>
     <div class="stat-value">{{ value }}</div>
     <div class="stat-foot">
       <span v-if="delta" class="stat-delta" :class="`is-${deltaDir ?? 'none'}`">
@@ -30,10 +39,45 @@ defineProps<{
   box-shadow: var(--shadow);
 }
 
+/* 标签行两端分布：角标挂在右侧，不传角标时标签还是贴在左边。
+   用 flex 而不是「标签 + 绝对定位的角标」，后者在窄卡片上会和长标签叠字 */
+.stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
 .stat-label {
   color: var(--muted);
   font-size: var(--fs-sm);
-  margin-bottom: 7px;
+}
+
+/* 角标只在有话要说时出现，所以它得够显眼：比正文小一号，但底色和字重都往上顶 */
+.stat-chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.7;
+}
+
+.stat-chip.is-warn {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
+.stat-chip.is-bad {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+/* 「样本不足」既不是好也不是坏，是「不知道」—— 用中性灰，别给它任何告警色 */
+.stat-chip.is-mute {
+  background: #f0f2f1;
+  color: var(--muted);
 }
 
 .stat-value {

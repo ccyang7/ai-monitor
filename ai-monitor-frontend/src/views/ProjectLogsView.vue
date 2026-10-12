@@ -1,23 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/api/client'
-import { fetchLogDetail, fetchLogs } from '@/api/logs'
-import AppDrawer from '@/components/AppDrawer.vue'
-import JsonView from '@/components/JsonView.vue'
+import { fetchLogs } from '@/api/logs'
+import LogDetailDrawer from '@/components/LogDetailDrawer.vue'
 import ProjectHeader from '@/components/ProjectHeader.vue'
 import ProjectTabs from '@/components/ProjectTabs.vue'
 import TimeRangePicker from '@/components/TimeRangePicker.vue'
-import {
-  formatCost,
-  formatDateTime,
-  formatDateTimeFull,
-  formatLatency,
-  formatNumber,
-} from '@/utils/format'
-import { tryParseJson } from '@/utils/json'
+import { formatCost, formatDateTime, formatLatency, formatNumber } from '@/utils/format'
 import { ALL_TIME, buildTimeRange, rangeError } from '@/utils/timerange'
 import type { TimeRangeValue } from '@/utils/timerange'
-import type { LogDetail, LogListItem, LogListParams } from '@/types/log'
+import type { LogListItem, LogListParams } from '@/types/log'
 
 const props = defineProps<{ projectId: string }>()
 
@@ -54,40 +46,8 @@ const loadError = ref('')
 // 攒而不是只看当前这页：翻页、改筛选条件时选项不该跟着变少
 const knownModels = ref<string[]>([])
 
+// 详情抽屉自己按 id 取数（异常页也要点进同一个抽屉），这里只管「点开了哪一条」
 const selectedId = ref<number | null>(null)
-const detail = ref<LogDetail | null>(null)
-const detailLoading = ref(false)
-const detailError = ref('')
-
-// 接入方经常把原始 JSON 直接上报（messages 数组、模型返回的结构化结果），
-// 探测出来就结构化渲染，探测不出（纯文本）保持原来的换行文本显示
-const inputJson = computed(() => tryParseJson(detail.value?.input))
-const outputJson = computed(() => tryParseJson(detail.value?.output))
-
-const copied = ref<'' | 'input' | 'output'>('')
-let copiedTimer: number | undefined
-
-// 复制的是原文而不是渲染后的内容：结构化视图会折叠长文本、吃掉引号，
-// 用户要粘到别处去比对时，那一份得跟数据库里的一模一样
-async function copyRaw(which: 'input' | 'output', text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    // 从别的机器用 http://192.168.x.x 访问时不是安全上下文，clipboard API 直接不存在，
-    // 退回已经被废弃但哪儿都能用的 execCommand
-    const scratch = document.createElement('textarea')
-    scratch.value = text
-    scratch.style.position = 'fixed'
-    scratch.style.opacity = '0'
-    document.body.appendChild(scratch)
-    scratch.select()
-    document.execCommand('copy')
-    document.body.removeChild(scratch)
-  }
-  copied.value = which
-  window.clearTimeout(copiedTimer)
-  copiedTimer = window.setTimeout(() => (copied.value = ''), 1600)
-}
 
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 
@@ -192,32 +152,6 @@ function resetFilters(): void {
   // 条件和页码都由上面的 watch 兜着发请求，本来就没条件可清时它也不会触发，无需额外处理
 }
 
-async function openDetail(row: LogListItem): Promise<void> {
-  const requestedId = row.id
-  selectedId.value = requestedId
-  detail.value = null
-  detailError.value = ''
-  detailLoading.value = true
-
-  try {
-    const data = await fetchLogDetail(requestedId)
-    // 请求飞在半路时用户又点了别的行，这一份结果已经作废，写进去会把新的盖掉
-    if (selectedId.value !== requestedId) return
-    detail.value = data
-  } catch (error) {
-    if (selectedId.value !== requestedId) return
-    detailError.value = extractErrorMessage(error)
-  } finally {
-    if (selectedId.value === requestedId) detailLoading.value = false
-  }
-}
-
-function closeDetail(): void {
-  selectedId.value = null
-  detail.value = null
-  detailError.value = ''
-}
-
 onMounted(load)
 </script>
 
@@ -312,7 +246,7 @@ onMounted(load)
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in items" :key="row.id" @click="openDetail(row)">
+            <tr v-for="row in items" :key="row.id" @click="selectedId = row.id">
               <td class="time" style="padding-left: 0">{{ formatDateTime(row.created_at) }}</td>
               <td class="model">{{ row.model }}</td>
               <td class="num">{{ formatNumber(row.input_tokens) }}</td>
@@ -367,119 +301,7 @@ onMounted(load)
     </template>
   </section>
 
-  <AppDrawer v-if="selectedId !== null" title="调用详情" @close="closeDetail">
-    <div v-if="detailLoading" class="loading">
-      <span class="spinner" />
-      正在加载详情…
-    </div>
-
-    <div v-else-if="detailError" class="form-error">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round">
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 8v4.5M12 16h.01" />
-      </svg>
-      <span>{{ detailError }}</span>
-    </div>
-
-    <template v-else-if="detail">
-      <div class="drawer-meta">
-        <span class="tag" :class="{ 'is-bad': detail.status === 'error' }">
-          <span class="dot" />
-          {{ detail.status === 'error' ? '失败' : '成功' }}
-        </span>
-        <span class="tag is-mute">{{ detail.model }}</span>
-        <span class="tag is-mute">{{ detail.provider }}</span>
-        <span class="drawer-time">{{ formatDateTimeFull(detail.created_at) }}</span>
-      </div>
-
-      <div class="metrics">
-        <div class="metric">
-          <div class="metric-name">输入 Token</div>
-          <div class="metric-value">{{ formatNumber(detail.input_tokens) }}</div>
-        </div>
-        <div class="metric">
-          <div class="metric-name">输出 Token</div>
-          <div class="metric-value">{{ formatNumber(detail.output_tokens) }}</div>
-        </div>
-        <div class="metric">
-          <div class="metric-name">总 Token</div>
-          <div class="metric-value">{{ formatNumber(detail.total_tokens) }}</div>
-        </div>
-        <div class="metric">
-          <div class="metric-name">响应时间</div>
-          <div class="metric-value">{{ formatLatency(detail.latency) }}</div>
-        </div>
-        <div class="metric">
-          <div class="metric-name">预估费用</div>
-          <div class="metric-value">{{ formatCost(detail.estimated_cost) }}</div>
-        </div>
-      </div>
-
-      <template v-if="detail.status === 'error' && detail.error_message">
-        <div class="content-label">错误信息</div>
-        <div class="content-block is-error">{{ detail.error_message }}</div>
-      </template>
-
-      <div class="content-label">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 19V5M5 12l7-7 7 7" />
-        </svg>
-        用户提问
-        <button
-          v-if="detail.input"
-          type="button"
-          class="content-copy"
-          :class="{ 'is-done': copied === 'input' }"
-          @click="copyRaw('input', detail.input)"
-        >
-          {{ copied === 'input' ? '已复制' : '复制原文' }}
-        </button>
-      </div>
-      <div v-if="detail.input" class="content-block" :class="{ 'is-json': inputJson !== undefined }">
-        <JsonView v-if="inputJson !== undefined" :data="inputJson" root />
-        <template v-else>{{ detail.input }}</template>
-      </div>
-      <div v-else class="content-none">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-          <path d="M4 10h16" />
-        </svg>
-        这次调用只上报了指标，没有记录提问内容
-      </div>
-
-      <div class="content-label">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 5v14M5 12l7 7 7-7" />
-        </svg>
-        模型回答
-        <button
-          v-if="detail.output"
-          type="button"
-          class="content-copy"
-          :class="{ 'is-done': copied === 'output' }"
-          @click="copyRaw('output', detail.output)"
-        >
-          {{ copied === 'output' ? '已复制' : '复制原文' }}
-        </button>
-      </div>
-      <div v-if="detail.output" class="content-block is-out" :class="{ 'is-json': outputJson !== undefined }">
-        <JsonView v-if="outputJson !== undefined" :data="outputJson" root />
-        <template v-else>{{ detail.output }}</template>
-      </div>
-      <div v-else class="content-none">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-          <path d="M4 10h16" />
-        </svg>
-        这次调用只上报了指标，没有记录回答内容
-      </div>
-    </template>
-  </AppDrawer>
+  <LogDetailDrawer :log-id="selectedId" @close="selectedId = null" />
 </template>
 
 <style scoped>
@@ -566,225 +388,5 @@ onMounted(load)
 
 .log-table tbody tr:hover .peek {
   color: var(--green-500);
-}
-
-/* --- 分页 --- */
-
-.pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 16px 2px 2px;
-  margin-top: 6px;
-  border-top: 1px solid #f1f5f3;
-}
-
-.pager-info {
-  color: var(--muted);
-  font-size: var(--fs-sm);
-}
-
-.pager-btns {
-  display: flex;
-  gap: 4px;
-}
-
-.pager-btn {
-  min-width: 32px;
-  padding: 6px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--card);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-}
-
-.pager-btn:hover:not(:disabled) {
-  border-color: var(--green-300);
-  color: var(--green-600);
-}
-
-.pager-btn.is-on {
-  background: var(--green-500);
-  border-color: var(--green-500);
-  color: #fff;
-  font-weight: 600;
-}
-
-.pager-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* --- 抽屉里的内容 --- */
-
-.drawer-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-}
-
-.drawer-time {
-  color: var(--faint);
-  font-size: var(--fs-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-/* 5 个指标排成 3 + 2：格线画在格子上而不是用 gap 露底色，
-   否则第二行空出来的那格会变成一块灰条 */
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  margin-bottom: 24px;
-}
-
-.metric {
-  padding: 13px 15px;
-}
-
-.metric + .metric {
-  border-left: 1px solid var(--line);
-}
-
-.metric:nth-child(3n + 1) {
-  border-left: 0;
-}
-
-.metric:nth-child(n + 4) {
-  border-top: 1px solid var(--line);
-}
-
-.metric-name {
-  color: var(--faint);
-  font-size: var(--fs-xs);
-  margin-bottom: 5px;
-}
-
-.metric-value {
-  font-size: var(--fs-lg);
-  font-weight: 660;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-
-.content-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: var(--fs-sm);
-  font-weight: 640;
-  color: var(--ink);
-  margin-bottom: 8px;
-}
-
-.content-label svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  color: var(--green-500);
-}
-
-/* 放在标题行右端而不是内容块里绝对定位：后者会压住内容的第一行。
-   静止时只有一行淡灰小字，悬停才浮出胶囊底色 —— 既看得见又不会喧宾夺主 */
-.content-copy {
-  margin-left: auto;
-  padding: 0 9px;
-  border: 1px solid transparent;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: var(--faint);
-  /* button 默认不继承字体，不写这行会掉回浏览器的默认字体 */
-  font-family: inherit;
-  font-size: 11px;
-  /* 标题行是 640 的字重，按钮跟着变粗会像是标题的一部分 */
-  font-weight: 400;
-  line-height: 19px;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s,
-    color 0.15s;
-}
-
-.content-copy:hover,
-.content-copy.is-done {
-  border-color: var(--green-300);
-  background: var(--card);
-  color: var(--green-700);
-}
-
-.content-block {
-  padding: 13px 15px;
-  border-radius: var(--r-md);
-  background: #f7faf8;
-  border: 1px solid #edf2ef;
-  font-size: var(--fs-sm);
-  line-height: 1.8;
-  color: var(--text);
-  /* 模型回答里换行是有意义的，不能当空白折叠掉 */
-  white-space: pre-wrap;
-  word-break: break-word;
-  margin-bottom: 22px;
-}
-
-.content-block.is-out {
-  background: var(--green-50);
-  border-color: var(--green-100);
-}
-
-/* JsonView 自己管换行，pre-wrap 会把组件模板里的缩进也当成内容显示出来 */
-.content-block.is-json {
-  white-space: normal;
-  line-height: 1.65;
-}
-
-.content-block.is-error {
-  background: var(--red-bg);
-  border-color: #f2d9d6;
-  color: var(--red);
-}
-
-.content-none {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 13px 15px;
-  border-radius: var(--r-md);
-  border: 1px dashed var(--line);
-  color: var(--faint);
-  font-size: var(--fs-sm);
-  margin-bottom: 22px;
-}
-
-.content-none svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-}
-
-@media (max-width: 760px) {
-  .metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .metric:nth-child(2n + 1) {
-    border-left: 0;
-  }
-
-  .metric:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
-  }
 }
 </style>

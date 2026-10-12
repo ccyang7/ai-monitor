@@ -26,6 +26,13 @@ const route = useRoute()
     </RouterLink>
     <RouterLink
       class="tab"
+      :class="{ 'is-on': route.name === 'project-anomalies' }"
+      :to="{ name: 'project-anomalies', params: { projectId } }"
+    >
+      异常
+    </RouterLink>
+    <RouterLink
+      class="tab"
       :class="{ 'is-on': route.name === 'project-settings' }"
       :to="{ name: 'project-settings', params: { projectId } }"
     >

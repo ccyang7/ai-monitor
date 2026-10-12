@@ -555,6 +555,96 @@
   font-size: var(--fs-xs);
 }
 
+/* --- 分段选择 ---
+   几选一、选项少、选完立即生效时用这个而不是下拉框：
+   下拉框把选项藏起来了，而这里的选项本身就是在告诉用户「可以按哪几类看」 */
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: #f0f4f1;
+}
+
+.seg-btn {
+  border: 0;
+  padding: 5px 13px;
+  border-radius: 7px;
+  background: transparent;
+  /* button 默认不继承字体，不写这行会掉回浏览器的默认字体 */
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.seg-btn:hover {
+  color: var(--green-600);
+}
+
+.seg-btn.is-on {
+  background: var(--card);
+  color: var(--green-700);
+  box-shadow: 0 1px 2px rgba(11, 35, 28, 0.08);
+}
+
+/* --- 分页 --- */
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 2px 2px;
+  margin-top: 6px;
+  border-top: 1px solid #f1f5f3;
+}
+
+.pager-info {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.pager-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.pager-btn {
+  min-width: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--green-300);
+  color: var(--green-600);
+}
+
+.pager-btn.is-on {
+  background: var(--green-500);
+  border-color: var(--green-500);
+  color: #fff;
+  font-weight: 600;
+}
+
+.pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* --- 表格 --- */
 
 .table {

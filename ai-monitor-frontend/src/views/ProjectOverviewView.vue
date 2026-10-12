@@ -2,20 +2,29 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/api/client'
 import { fetchCostStats, fetchModelStats, fetchOverview, fetchTokenStats } from '@/api/stats'
+import BriefingBar from '@/components/BriefingBar.vue'
 import ModelUsageChart from '@/components/ModelUsageChart.vue'
 import ProjectHeader from '@/components/ProjectHeader.vue'
 import ProjectTabs from '@/components/ProjectTabs.vue'
 import StatCard from '@/components/StatCard.vue'
 import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import TrendChart from '@/components/TrendChart.vue'
-import { formatCompact, formatCost, formatLatency, formatNumber } from '@/utils/format'
+import {
+  formatCompact,
+  formatCost,
+  formatDelta,
+  formatLatency,
+  formatNumber,
+} from '@/utils/format'
 import {
   DEFAULT_RANGE,
   OVERVIEW_MAX_DAYS,
   buildTimeRange,
   rangeError,
+  rangeLabel,
 } from '@/utils/timerange'
 import type { Granularity, TimeRangeValue } from '@/utils/timerange'
+import type { AnomalyCounts } from '@/types/anomaly'
 import type { CostsOut, ModelsOut, OverviewOut, TokensOut } from '@/types/stats'
 
 const props = defineProps<{ projectId: string }>()
@@ -53,39 +62,64 @@ const compareHint = computed(() => {
   }
 })
 
-interface Delta {
-  text: string
-  dir: 'up' | 'down' | 'flat' | 'none'
-}
-
-function deltaOf(current: number | null, before: number | null): Delta {
-  if (current === null || before === null) return { text: '—', dir: 'none' }
-  if (before === 0) {
-    // 上一区间是 0，涨跌算不出百分比（除数为零），只能说清楚是「从无到有」
-    return current > 0 ? { text: '新增', dir: 'up' } : { text: '—', dir: 'none' }
-  }
-
-  const change = ((current - before) / before) * 100
-  // 差得极小的时候显示「持平」而不是「↑ 0.0%」，后者看着像个 bug
-  if (Math.abs(change) < 0.05) return { text: '持平', dir: 'flat' }
-
-  return change > 0
-    ? { text: `↑ ${change.toFixed(1)}%`, dir: 'up' }
-    : { text: `↓ ${Math.abs(change).toFixed(1)}%`, dir: 'down' }
-}
-
-const callsDelta = computed(() => deltaOf(summary.value?.calls ?? null, previous.value?.calls ?? null))
-const tokensDelta = computed(() =>
-  deltaOf(summary.value?.total_tokens ?? null, previous.value?.total_tokens ?? null),
+const callsDelta = computed(() =>
+  formatDelta(summary.value?.calls ?? null, previous.value?.calls ?? null),
 )
-const costDelta = computed(() => deltaOf(summary.value?.cost ?? null, previous.value?.cost ?? null))
+const tokensDelta = computed(() =>
+  formatDelta(summary.value?.total_tokens ?? null, previous.value?.total_tokens ?? null),
+)
+const costDelta = computed(() =>
+  formatDelta(summary.value?.cost ?? null, previous.value?.cost ?? null),
+)
 const latencyDelta = computed(() =>
-  deltaOf(summary.value?.avg_latency ?? null, previous.value?.avg_latency ?? null),
+  formatDelta(summary.value?.avg_latency ?? null, previous.value?.avg_latency ?? null),
 )
 
 // 图吃掉「一屏减掉页面其余部分」的高度。460 是顶栏 + tabs + 统计卡片 + 留白的实测值，
 // 写死一个像素高度的话，屏幕矮的人要滚动才看得见 x 轴，屏幕高的人图又小得空荡
 const chartHeight = 'clamp(260px, calc(100vh - 460px), 520px)'
+
+const ZERO_COUNTS: AnomalyCounts = { token: 0, latency: 0, error: 0, error_rate: 0 }
+
+const anomalyCounts = computed(() => overview.value?.anomaly_counts ?? ZERO_COUNTS)
+const baselineAvailable = computed(() => overview.value?.baseline_available ?? false)
+
+// 简报条上的「数据更新于」：每次取数成功时更新，不是页面挂载时
+const loadedAt = ref<number | null>(null)
+
+type Chip = { text: string; tone: 'warn' | 'bad' | 'mute' } | null
+
+// 角标的规则：有话要说才挂。挂了「正常」就等于承诺这张卡上的数字被检查过，
+// 而预估成本这一项 V1 根本没有对应的判定 —— 给它发合格证比不给更糟
+const callsChip = computed<Chip>(() => {
+  const failed = anomalyCounts.value.error + anomalyCounts.value.error_rate
+  return failed > 0 ? { text: `异常 ${failed}`, tone: 'bad' } : null
+})
+
+const tokensChip = computed<Chip>(() => {
+  if (anomalyCounts.value.token > 0) {
+    return { text: `偏高 ${anomalyCounts.value.token}`, tone: 'warn' }
+  }
+  // 基线没攒够时这张卡上什么都没量过，那几格 0 不代表「正常」
+  return baselineAvailable.value ? null : { text: '样本不足', tone: 'mute' }
+})
+
+const latencyChip = computed<Chip>(() => {
+  if (anomalyCounts.value.latency > 0) {
+    return { text: `偏慢 ${anomalyCounts.value.latency}`, tone: 'warn' }
+  }
+  return baselineAvailable.value ? null : { text: '样本不足', tone: 'mute' }
+})
+
+// 简报条说「Token 集中在谁」用的是 Token 口径的占比，那就得按 Token 选头名，
+// 按调用次数选会和后半句的数字对不上
+const topByTokens = computed(() => {
+  const items = models.value?.items ?? []
+  if (!items.length) return null
+  return items.reduce((best, item) =>
+    item.token_percentage > best.token_percentage ? item : best,
+  )
+})
 
 const tokenLabels = computed(() => tokens.value?.series.map((point) => point.date) ?? [])
 const tokenValues = computed(() => tokens.value?.series.map((point) => point.total_tokens) ?? [])
@@ -131,6 +165,7 @@ async function load(): Promise<void> {
     tokens.value = tokenData
     costs.value = costData
     models.value = modelData
+    loadedAt.value = Date.now()
   } catch (error) {
     loadError.value = extractErrorMessage(error)
   } finally {
@@ -169,6 +204,20 @@ onMounted(load)
   </div>
 
   <template v-else-if="overview">
+    <BriefingBar
+      :project-id="projectId"
+      :range-label="rangeLabel(range)"
+      :calls="summary?.calls ?? null"
+      :previous-calls="previous?.calls ?? null"
+      :total-tokens="summary?.total_tokens ?? null"
+      :top-model="topByTokens?.model ?? null"
+      :top-model-share="topByTokens?.token_percentage ?? null"
+      :model-count="models?.items.length ?? 0"
+      :anomaly-counts="anomalyCounts"
+      :baseline-available="baselineAvailable"
+      :loaded-at="loadedAt"
+    />
+
     <section class="stats" :class="{ 'is-busy': loading }">
       <StatCard
         label="调用次数"
@@ -176,6 +225,7 @@ onMounted(load)
         :delta="callsDelta.text"
         :delta-dir="callsDelta.dir"
         :hint="compareHint"
+        :chip="callsChip"
       />
       <StatCard
         label="总 Token"
@@ -183,6 +233,7 @@ onMounted(load)
         :delta="tokensDelta.text"
         :delta-dir="tokensDelta.dir"
         :hint="compareHint"
+        :chip="tokensChip"
       />
       <StatCard
         label="预估成本"
@@ -197,6 +248,7 @@ onMounted(load)
         :delta="latencyDelta.text"
         :delta-dir="latencyDelta.dir"
         :hint="compareHint"
+        :chip="latencyChip"
       />
     </section>
 

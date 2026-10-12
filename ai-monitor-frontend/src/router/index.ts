@@ -28,6 +28,12 @@ const routes: RouteRecordRaw[] = [
     props: true,
   },
   {
+    path: '/projects/:projectId/anomalies',
+    name: 'project-anomalies',
+    component: () => import('@/views/ProjectAnomaliesView.vue'),
+    props: true,
+  },
+  {
     path: '/projects/:projectId/settings',
     name: 'project-settings',
     component: () => import('@/views/ProjectSettingsView.vue'),

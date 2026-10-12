@@ -72,3 +72,31 @@ export function formatRelative(iso: string | null): string {
 export function initials(username: string): string {
   return username.trim().charAt(0).toUpperCase() || '?'
 }
+
+/**
+ * 环比百分数。上一区间是 0 时返回 null 而不是 Infinity —— 除数为零，
+ * 涨跌算不出百分比，调用方各自决定怎么说（卡片写「新增」，简报条干脆不提环比）
+ */
+export function changePercent(current: number | null, before: number | null): number | null {
+  if (current === null || before === null || before === 0) return null
+  return ((current - before) / before) * 100
+}
+
+export interface Delta {
+  text: string
+  dir: 'up' | 'down' | 'flat' | 'none'
+}
+
+export function formatDelta(current: number | null, before: number | null): Delta {
+  if (current === null || before === null) return { text: '—', dir: 'none' }
+  // 上一区间是 0，涨跌算不出百分比，只能说清楚是「从无到有」
+  if (before === 0) return current > 0 ? { text: '新增', dir: 'up' } : { text: '—', dir: 'none' }
+
+  const change = changePercent(current, before) as number
+  // 差得极小的时候显示「持平」而不是「↑ 0.0%」，后者看着像个 bug
+  if (Math.abs(change) < 0.05) return { text: '持平', dir: 'flat' }
+
+  return change > 0
+    ? { text: `↑ ${change.toFixed(1)}%`, dir: 'up' }
+    : { text: `↓ ${Math.abs(change).toFixed(1)}%`, dir: 'down' }
+}

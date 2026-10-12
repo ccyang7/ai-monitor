@@ -1,5 +1,7 @@
 // 对应后端 app/schemas/stats.py
 
+import type { AnomalyCounts } from './anomaly'
+
 // 时间区间的共同约定：四个接口都收 start_date / end_date，都是左闭右开 [start, end)
 export interface StatsParams {
   start_date: string
@@ -23,8 +25,12 @@ export interface OverviewOut {
   summary: PeriodMetrics
   // 上一个等长区间的同口径指标，环比由前端算（不是金额，不涉及精度口径）
   previous: PeriodMetrics
-  // 阶段 9 接上之前恒为 null —— 前端据此区分「没异常」和「异常功能还没做」
-  anomaly_count: number | null
+  // 按类型分的异常条数，喂统计卡角标和简报条。阶段 9 接上之前这个字段整个不存在，
+  // 前端不去判断「功能做了没」—— 字段有了就说明能用
+  anomaly_counts: AnomalyCounts
+  // token / latency 这两类判没判。为 false 时 anomaly_counts 里的 0 不代表「正常」，
+  // 只代表「样本还不够，还没开始判」—— 简报条和一个统计卡角标要靠它改措辞
+  baseline_available: boolean
 }
 
 export interface TokenSummary {
