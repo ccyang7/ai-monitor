@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/api/client'
 import { fetchAnomalies } from '@/api/anomaly'
+import AnomalySettingsCard from '@/components/AnomalySettingsCard.vue'
 import LogDetailDrawer from '@/components/LogDetailDrawer.vue'
 import ProjectHeader from '@/components/ProjectHeader.vue'
 import ProjectTabs from '@/components/ProjectTabs.vue'
@@ -87,13 +88,11 @@ interface Card {
   segments: Segment[]
 }
 
-// 错误率是窗口判定，描述里给「哪一天」；其余三类都能点进具体某一次调用
+// 错误率是窗口判定，描述里给「哪一天」；其余三类都能点进具体某一次调用。
+// 模型名单独一个 span 渲染（见模板），不拼进这个字符串 —— 它要加粗，
+// 拼成一整句就只能整句一个样式
 function describeWhen(item: AnomalyItem): string {
-  if (item.window) {
-    return `${item.window} 全天`
-  }
-  const at = formatDateTimeFull(item.created_at)
-  return item.model ? `${at} · ${item.model}` : at
+  return item.window ? `${item.window} 全天` : formatDateTimeFull(item.created_at)
 }
 
 function describe(item: AnomalyItem): Segment[] {
@@ -101,44 +100,38 @@ function describe(item: AnomalyItem): Segment[] {
   const baseline = item.baseline ?? 0
   const ratio = item.ratio ?? 0
 
+  // 描述不重复标题：标题已经是「调用失败」，描述就直接给错在哪；
+  // 「这次调用」四个字同理，一张卡片只有一次调用，主语不用再说
   switch (item.type) {
     case 'token':
       return [
-        { text: '这次调用用了 ' },
+        { text: '用了 ' },
         { text: formatNumber(value), strong: true },
         { text: ' Token，是平时（' },
         { text: formatNumber(baseline), strong: true },
         { text: '）的 ' },
         { text: `${ratio} 倍`, strong: true, tone: 'warn' },
-        { text: '。' },
       ]
 
     case 'latency':
       return [
-        { text: '这次调用耗时 ' },
+        { text: '耗时 ' },
         { text: formatLatency(value), strong: true },
         { text: '，是平时（' },
         { text: formatLatency(baseline), strong: true },
         { text: '）的 ' },
         { text: `${ratio} 倍`, strong: true, tone: 'warn' },
-        { text: '。' },
       ]
 
     case 'error':
-      return [
-        { text: '这次调用失败了' },
-        item.error_message
-          ? { text: `：${item.error_message}` }
-          : { text: '，上报时没有带错误信息。' },
-      ]
+      return [{ text: item.error_message ?? '上报时没有带错误信息' }]
 
     case 'error_rate':
       return [
-        { text: '这一天的错误率 ' },
+        { text: '错误率 ' },
         { text: `${(value * 100).toFixed(1)}%`, strong: true, tone: 'bad' },
         { text: '，超过参考值 ' },
         { text: `${(baseline * 100).toFixed(0)}%`, strong: true },
-        { text: '。' },
       ]
   }
 }
@@ -154,6 +147,12 @@ const cards = computed<Card[]>(() =>
 
 function isBad(item: AnomalyItem): boolean {
   return item.type === 'error' || item.type === 'error_rate'
+}
+
+// 错误率是整天的窗口判定，没有某一次调用可以点开，点了不该有任何反应
+function openDetail(item: AnomalyItem): void {
+  if (item.log_id === null) return
+  selectedId.value = item.log_id
 }
 
 async function load(): Promise<void> {
@@ -194,6 +193,16 @@ function goPage(target: number | '…'): void {
   page.value = target
 }
 
+// 阈值改完，历史是被重判的 —— 屏幕上这份列表还是旧标准的结果，必须重新拉。
+// 回到第 1 页：条数变了，停在第 3 页很可能是一片空白
+function reloadAfterSettings(): void {
+  if (page.value !== 1) {
+    page.value = 1
+    return
+  }
+  void load()
+}
+
 // 换条件回到第一页：停在第 3 页再换一个只有一页结果的条件，看到的会是一片空白。
 // 页码没变时得自己发请求 —— watch(page) 只在页码真的变了才触发
 watch([range, typeFilter], () => {
@@ -217,16 +226,7 @@ onMounted(load)
   </ProjectHeader>
   <ProjectTabs :project-id="projectId" />
 
-  <!-- 不解释「基线」，下面的「8 倍」就是一句没有参照的话 -->
-  <div class="note">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-         stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 16v-4.5M12 8h.01" />
-    </svg>
-    <!-- 整段写成一行：模板里的换行在浏览器里是一个空格，落在中文标点前会变成一道缝 -->
-    <span><b>基线</b>是这个项目里同一个模型最近 7 天的平均水平。某次调用超出基线几倍，就判定为异常。样本少于 10 次的模型不做判定 —— 数据太少，算出来的「正常」不可信。</span>
-  </div>
+  <AnomalySettingsCard :project-id="projectId" @saved="reloadAfterSettings" />
 
   <div class="toolbar">
     <div class="seg">
@@ -269,29 +269,23 @@ onMounted(load)
 
   <template v-else>
     <div v-if="cards.length" class="anomalies" :class="{ 'is-busy': loading }">
+      <!-- 整张卡可点，不挂「查看详情」按钮：每一行右边都站一个按钮，扫一眼全是按钮，
+           而类型色条 + 标题已经把「哪类、多严重」说完了 -->
       <article
         v-for="card in cards"
         :key="`${card.item.type}-${card.item.log_id ?? card.item.window}`"
         class="anomaly"
-        :class="{ 'is-bad': isBad(card.item) }"
+        :class="{ 'is-bad': isBad(card.item), 'is-link': card.item.log_id !== null }"
+        :role="card.item.log_id !== null ? 'button' : undefined"
+        :tabindex="card.item.log_id !== null ? 0 : undefined"
+        @click="openDetail(card.item)"
+        @keydown.enter="openDetail(card.item)"
       >
-        <div class="anomaly-icon">
-          <svg v-if="isBad(card.item)" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 8v4.5M12 16h.01" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3.5 2.6 20h18.8z" />
-            <path d="M12 10v4M12 17.2h.01" />
-          </svg>
-        </div>
-
         <div class="anomaly-body">
           <div class="anomaly-top">
             <span class="anomaly-type">{{ card.title }}</span>
             <span class="anomaly-when">{{ card.when }}</span>
+            <span v-if="card.item.model" class="anomaly-model">{{ card.item.model }}</span>
           </div>
           <p class="anomaly-desc">
             <template v-for="(segment, index) in card.segments" :key="index">
@@ -304,14 +298,11 @@ onMounted(load)
           </p>
         </div>
 
-        <button
-          v-if="card.item.log_id !== null"
-          class="btn btn-ghost btn-sm anomaly-go"
-          type="button"
-          @click="selectedId = card.item.log_id"
-        >
-          查看详情
-        </button>
+        <svg v-if="card.item.log_id !== null" class="anomaly-go" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
+             stroke-linejoin="round">
+          <path d="M9 6l6 6-6 6" />
+        </svg>
       </article>
     </div>
 
@@ -343,7 +334,8 @@ onMounted(load)
       </div>
     </div>
 
-    <div v-if="cards.length" class="pager">
+    <!-- 只有一页时不画分页器：「上一页 1 下一页」全灰着，占的却是屏幕上的实位 -->
+    <div v-if="totalPages > 1" class="pager">
       <span class="pager-info">共 {{ total }} 条，每页 {{ PAGE_SIZE }} 条</span>
       <div class="pager-btns">
         <button class="pager-btn" type="button" :disabled="page <= 1" @click="page -= 1">
@@ -372,30 +364,30 @@ onMounted(load)
     </div>
 
     <!-- 样本不足：故意和上面的异常卡长得不一样 —— 那几条回答「哪里出了问题」，
-         这几条回答「哪里还看不出来」，后者绝不能被画成「一切正常」的样子 -->
-    <template v-if="showBaselines && insufficient.length">
-      <div v-for="item in insufficient" :key="item.model" class="low-sample">
-        <div class="low-sample-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M5.6 5.6l12.8 12.8" />
-          </svg>
+         这几条回答「哪里还看不出来」，后者绝不能被画成「一切正常」的样子。
+         一个项目一块就够，几行都长得一样，逐行重复解释只是把屏幕填满 -->
+    <div v-if="showBaselines && insufficient.length" class="low-sample">
+      <div class="low-sample-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M5.6 5.6l12.8 12.8" />
+        </svg>
+      </div>
+      <div class="low-sample-body">
+        <div class="low-sample-title">
+          {{ insufficient.length }} 个模型样本不够，用量与延迟暂时不判定
         </div>
-        <div class="low-sample-body">
-          <div class="low-sample-top">
+        <ul class="low-sample-list">
+          <li v-for="item in insufficient" :key="item.model">
             <span class="low-sample-model">{{ item.model }}</span>
             <span class="low-sample-when">
-              最近 7 天 {{ item.samples }} 次调用 · 判定需要 {{ item.required }} 次
+              最近 7 天 {{ item.samples }} 次 · 还差 {{ item.required - item.samples }} 次开始判定
             </span>
-          </div>
-          <p class="low-sample-desc">
-            样本太少，算出来的基线不可信 —— 所以这里显示的是「暂时无法判断」，而不是「没有异常」。再积累 <b>{{ item.required - item.samples }} 次</b>调用后开始判定。
-          </p>
-        </div>
-        <span class="tag is-mute">样本不足</span>
+          </li>
+        </ul>
       </div>
-    </template>
+    </div>
   </template>
 
   <LogDetailDrawer :log-id="selectedId" @close="selectedId = null" />
@@ -438,12 +430,13 @@ onMounted(load)
 .anomaly {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 17px 20px;
+  gap: 14px;
+  padding: 15px 18px 15px 20px;
   border-radius: var(--r-lg);
   background: var(--card);
   box-shadow: var(--shadow);
   border-left: 4px solid var(--amber);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 /* 失败和错误率用红色：它们比「用量偏高」更值得立刻处理 */
@@ -451,25 +444,15 @@ onMounted(load)
   border-left-color: var(--red);
 }
 
-.anomaly-icon {
-  flex: none;
-  width: 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--amber-bg);
-  color: var(--amber);
+/* 只有能点开详情的卡片才给悬停反馈。错误率是整天的窗口，没有某一次调用可看，
+   把它也画成可点的样子，点下去没反应比不给反馈更让人困惑 */
+.anomaly.is-link {
+  cursor: pointer;
 }
 
-.anomaly.is-bad .anomaly-icon {
-  background: var(--red-bg);
-  color: var(--red);
-}
-
-.anomaly-icon svg {
-  width: 19px;
-  height: 19px;
+.anomaly.is-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(11, 35, 28, 0.05), 0 10px 26px rgba(11, 35, 28, 0.1);
 }
 
 .anomaly-body {
@@ -497,6 +480,14 @@ onMounted(load)
   font-variant-numeric: tabular-nums;
 }
 
+/* 一行里真正用来扫的是「哪个模型不对劲」，时间只是回想时才看的 ——
+   所以模型加粗加深，时间留在 faint 里 */
+.anomaly-model {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--text);
+}
+
 .anomaly-desc {
   font-size: var(--fs-sm);
   color: var(--muted);
@@ -520,6 +511,15 @@ onMounted(load)
 
 .anomaly-go {
   flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--faint);
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.anomaly.is-link:hover .anomaly-go {
+  color: var(--ink);
+  transform: translateX(2px);
 }
 
 /* --- 样本不足 ---
@@ -528,8 +528,8 @@ onMounted(load)
 .low-sample {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 15px 18px;
+  gap: 16px;
+  padding: 16px 20px;
   border-radius: var(--r-md);
   border: 1px dashed var(--line);
   background: #fafbfb;
@@ -557,34 +557,35 @@ onMounted(load)
   min-width: 0;
 }
 
-.low-sample-top {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
-}
-
-.low-sample-model {
+.low-sample-title {
   font-size: var(--fs-base);
   font-weight: 650;
   color: var(--ink);
+}
+
+.low-sample-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 28px;
+  margin-top: 6px;
+}
+
+.low-sample-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.low-sample-model {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
 }
 
 .low-sample-when {
   color: var(--faint);
   font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
-}
-
-.low-sample-desc {
-  font-size: var(--fs-sm);
-  color: var(--muted);
-  line-height: 1.7;
-}
-
-.low-sample-desc b {
-  color: var(--ink);
-  font-weight: 660;
 }
 </style>

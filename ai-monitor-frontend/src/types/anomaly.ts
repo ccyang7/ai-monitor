@@ -61,3 +61,26 @@ export interface AnomalyListOut {
   // 只列样本不足的模型，达标的不在里面
   insufficient_baselines: InsufficientBaseline[]
 }
+
+// 一项阈值给三条信息而不是一个数字：界面要能分清「跟随默认」和
+// 「正好被设成了默认值」，只给生效值这两种状态长得一模一样。
+// default 也要给 —— 否则「跟随默认（5 倍）」里的那个 5 得在前端再写死一遍
+export interface AnomalySettingField {
+  value: number
+  default: number
+  is_custom: boolean
+}
+
+export interface AnomalySettingsOut {
+  token_anomaly_ratio: AnomalySettingField
+  latency_anomaly_ratio: AnomalySettingField
+  error_rate_threshold: AnomalySettingField
+}
+
+// null = 这一项跟随系统默认。PUT 是整体替换不是 PATCH：
+// 三项每次都要一起发，漏掉的项等于 null（也就是「恢复默认」）
+export interface AnomalySettingsIn {
+  token_anomaly_ratio: number | null
+  latency_anomaly_ratio: number | null
+  error_rate_threshold: number | null
+}
