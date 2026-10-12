@@ -7,11 +7,13 @@ const props = defineProps<{
   modelValue: TimeRangeValue
   // 日志页要「全部时间」这一项；概览页的统计接口 start/end 是必填的，给不了
   allowAll?: boolean
+  // 自定义范围的跨度上限，不传就是不限
+  maxDays?: number
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [TimeRangeValue] }>()
 
-const error = computed(() => rangeError(props.modelValue))
+const error = computed(() => rangeError(props.modelValue, props.maxDays))
 
 // 每次整体替换对象而不是改其中的字段：直接改 props 里的字段 Vue 会警告，
 // 而且父组件拿到的是同一个引用，watch 不触发

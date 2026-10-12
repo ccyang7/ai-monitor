@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { extractErrorMessage } from '@/api/client'
-import { fetchOverview, fetchTokenStats } from '@/api/stats'
+import { fetchCostStats, fetchModelStats, fetchOverview, fetchTokenStats } from '@/api/stats'
+import ModelUsageChart from '@/components/ModelUsageChart.vue'
 import ProjectHeader from '@/components/ProjectHeader.vue'
 import ProjectTabs from '@/components/ProjectTabs.vue'
 import StatCard from '@/components/StatCard.vue'
 import TimeRangePicker from '@/components/TimeRangePicker.vue'
 import TrendChart from '@/components/TrendChart.vue'
+import { formatCompact, formatCost, formatLatency, formatNumber } from '@/utils/format'
 import {
-  formatCompact,
-  formatCost,
-  formatDateTime,
-  formatLatency,
-  formatNumber,
-} from '@/utils/format'
-import { DEFAULT_RANGE, buildTimeRange, rangeError } from '@/utils/timerange'
-import type { TimeRangeValue } from '@/utils/timerange'
-import type { OverviewOut, TokensOut } from '@/types/stats'
+  DEFAULT_RANGE,
+  OVERVIEW_MAX_DAYS,
+  buildTimeRange,
+  rangeError,
+} from '@/utils/timerange'
+import type { Granularity, TimeRangeValue } from '@/utils/timerange'
+import type { CostsOut, ModelsOut, OverviewOut, TokensOut } from '@/types/stats'
 
 const props = defineProps<{ projectId: string }>()
 
@@ -25,8 +25,14 @@ const projectId = computed(() => Number(props.projectId))
 const range = ref<TimeRangeValue>({ ...DEFAULT_RANGE })
 const overview = ref<OverviewOut | null>(null)
 const tokens = ref<TokensOut | null>(null)
+const costs = ref<CostsOut | null>(null)
+const models = ref<ModelsOut | null>(null)
 const loading = ref(false)
 const loadError = ref('')
+
+// 记住上一次真正加载用的粒度，而不是从 range 实时推导：自定义范围没填全时
+// buildTimeRange 返回 null，实时推导会让卡片上的文案和已经画出来的图对不上
+const granularity = ref<Granularity>('day')
 
 const summary = computed(() => overview.value?.summary ?? null)
 const previous = computed(() => overview.value?.previous ?? null)
@@ -42,7 +48,8 @@ const compareHint = computed(() => {
     case '30d':
       return '较前 30 天'
     default:
-      return '较上一周期'
+      // 自定义：单独一天时上一区间就是前一天，跨多天才叫「上一周期」
+      return granularity.value === 'hour' ? '较前一日' : '较上一周期'
   }
 })
 
@@ -76,10 +83,23 @@ const latencyDelta = computed(() =>
   deltaOf(summary.value?.avg_latency ?? null, previous.value?.avg_latency ?? null),
 )
 
-const labels = computed(() => tokens.value?.series.map((point) => point.date) ?? [])
-const values = computed(() => tokens.value?.series.map((point) => point.total_tokens) ?? [])
+// 图吃掉「一屏减掉页面其余部分」的高度。460 是顶栏 + tabs + 统计卡片 + 留白的实测值，
+// 写死一个像素高度的话，屏幕矮的人要滚动才看得见 x 轴，屏幕高的人图又小得空荡
+const chartHeight = 'clamp(260px, calc(100vh - 460px), 520px)'
 
-const recent = computed(() => overview.value?.recent_logs ?? [])
+const tokenLabels = computed(() => tokens.value?.series.map((point) => point.date) ?? [])
+const tokenValues = computed(() => tokens.value?.series.map((point) => point.total_tokens) ?? [])
+const costLabels = computed(() => costs.value?.series.map((point) => point.date) ?? [])
+const costValues = computed(() => costs.value?.series.map((point) => point.cost) ?? [])
+
+// 轴的缩写得带货币符号：光看「20」分不清是 20 元还是 20 次调用
+const costAxis = (value: number) => `¥${formatCompact(value)}`
+
+const seriesHint = computed(() =>
+  granularity.value === 'hour'
+    ? '按小时统计，没有调用的小时按 0 计'
+    : '按天统计，没有调用的日子按 0 计',
+)
 
 // summary 是当前区间的汇总，字段名不叫 today —— 用户选了近 30 天时它不是「今天」
 const avgLatencyText = computed(() => {
@@ -94,18 +114,23 @@ async function load(): Promise<void> {
   }
 
   const query = buildTimeRange(range.value)
-  // 自定义范围只填了一头、或两头填反了，都不是有效区间，等用户填完再说
-  if (!query || rangeError(range.value)) return
+  // 自定义范围只填了一头、两头填反了、或跨度超上限，都不是有效区间，等用户改好再说
+  if (!query || rangeError(range.value, OVERVIEW_MAX_DAYS)) return
 
+  granularity.value = query.granularity
   loading.value = true
   loadError.value = ''
   try {
-    const [overviewData, tokenData] = await Promise.all([
+    const [overviewData, tokenData, costData, modelData] = await Promise.all([
       fetchOverview(projectId.value, query),
       fetchTokenStats(projectId.value, query),
+      fetchCostStats(projectId.value, query),
+      fetchModelStats(projectId.value, query),
     ])
     overview.value = overviewData
     tokens.value = tokenData
+    costs.value = costData
+    models.value = modelData
   } catch (error) {
     loadError.value = extractErrorMessage(error)
   } finally {
@@ -121,7 +146,7 @@ onMounted(load)
 <template>
   <ProjectHeader :project-id="projectId" fallback-title="项目概览">
     <template #actions>
-      <TimeRangePicker v-model="range" />
+      <TimeRangePicker v-model="range" :max-days="OVERVIEW_MAX_DAYS" />
     </template>
   </ProjectHeader>
   <ProjectTabs :project-id="projectId" />
@@ -154,7 +179,7 @@ onMounted(load)
       />
       <StatCard
         label="总 Token"
-        :value="formatCompact(summary?.total_tokens ?? 0)"
+        :value="formatNumber(summary?.total_tokens ?? 0)"
         :delta="tokensDelta.text"
         :delta-dir="tokensDelta.dir"
         :hint="compareHint"
@@ -179,62 +204,47 @@ onMounted(load)
       <div class="card-head">
         <div>
           <h2 class="card-title">Token 用量趋势</h2>
-          <p class="card-hint">按天统计，没有调用的日子按 0 计</p>
+          <p class="card-hint">{{ seriesHint }}</p>
         </div>
       </div>
-      <TrendChart :labels="labels" :values="values" name="Token" />
+      <TrendChart
+        :labels="tokenLabels"
+        :values="tokenValues"
+        name="Token"
+        type="bar"
+        :height="chartHeight"
+      />
     </section>
 
-    <section class="card" :class="{ 'is-busy': loading }">
-      <div class="card-head">
-        <h2 class="card-title">最近调用</h2>
-        <RouterLink
-          v-if="recent.length"
-          class="card-link"
-          :to="{ name: 'project-logs', params: { projectId } }"
-        >
-          全部记录 →
-        </RouterLink>
-      </div>
-      <p class="card-hint">这是项目最新发生的调用，不受上方时间筛选影响</p>
-
-      <div v-if="!recent.length" class="empty">
-        <div class="empty-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 7h16M4 12h16M4 17h9" />
-          </svg>
+    <div class="charts">
+      <section class="card" :class="{ 'is-busy': loading }">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">成本趋势</h2>
+            <p class="card-hint">{{ seriesHint }}</p>
+          </div>
         </div>
-        <div class="empty-title">这个项目还没有调用记录</div>
-        <p class="empty-hint">接入方上报第一条调用之后，这里就会显示</p>
-      </div>
+        <TrendChart
+          :labels="costLabels"
+          :values="costValues"
+          name="成本"
+          type="bar"
+          :format-value="formatCost"
+          :format-axis="costAxis"
+          height="220px"
+        />
+      </section>
 
-      <table v-else class="table recent-table">
-        <thead>
-          <tr>
-            <th style="padding-left: 0">时间</th>
-            <th>模型</th>
-            <th class="num">总 Token</th>
-            <th class="num">耗时</th>
-            <th style="text-align: right; padding-right: 0">状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in recent" :key="row.id">
-            <td class="time" style="padding-left: 0">{{ formatDateTime(row.created_at) }}</td>
-            <td class="model">{{ row.model }}</td>
-            <td class="num">{{ formatNumber(row.total_tokens) }}</td>
-            <td class="num">{{ formatLatency(row.latency) }}</td>
-            <td style="text-align: right; padding-right: 0">
-              <span class="tag" :class="{ 'is-bad': row.status === 'error' }">
-                <span class="dot" />
-                {{ row.status === 'error' ? '失败' : '成功' }}
-              </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
+      <section class="card" :class="{ 'is-busy': loading }">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">模型使用占比</h2>
+            <p class="card-hint">同一个模型在不同口径下的占比经常不一样</p>
+          </div>
+        </div>
+        <ModelUsageChart :items="models?.items ?? []" />
+      </section>
+    </div>
   </template>
 </template>
 
@@ -251,32 +261,11 @@ onMounted(load)
   opacity: 0.6;
 }
 
-.card + .card {
+/* 窄屏时两张卡自动堆成一列 —— 硬写两列的话，半宽的趋势图连 x 轴标签都放不下 */
+.charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: var(--gutter);
   margin-top: var(--gutter);
-}
-
-.card-link {
-  color: var(--green-500);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.card-link:hover {
-  color: var(--green-600);
-}
-
-.recent-table .time {
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.recent-table .model {
-  font-weight: 560;
-  color: var(--ink);
-}
-
-.recent-table .empty {
-  padding: 30px 20px 12px;
 }
 </style>

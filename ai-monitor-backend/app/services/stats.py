@@ -1,11 +1,12 @@
-"""项目监控中心的统计查询：区间汇总、按天趋势、模型分布。"""
+"""项目监控中心的统计查询：区间汇总、按天或按小时的趋势、模型分布。"""
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import ColumnElement, Date, func, select
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy.orm import Session
 
 from app.models import LLMRequest, Project
 from app.schemas.stats import (
@@ -16,26 +17,10 @@ from app.schemas.stats import (
     ModelsOut,
     OverviewOut,
     PeriodMetrics,
-    RecentLogItem,
     StatsQuery,
     TokenPoint,
     TokenSummary,
     TokensOut,
-)
-
-# 概览页只展示一屏，给 5 条
-_RECENT_LIMIT = 5
-
-# 最近调用只取这几列，input / output 不碰：PG 的大文本在 TOAST 表里，
-# SELECT 列表不出现该列时连 TOAST 都不读。列不全就会静默触发逐行补查，
-# 这份清单必须与 RecentLogItem 的字段一致
-_RECENT_COLUMNS = (
-    LLMRequest.id,
-    LLMRequest.model,
-    LLMRequest.total_tokens,
-    LLMRequest.latency,
-    LLMRequest.status,
-    LLMRequest.created_at,
 )
 
 
@@ -52,24 +37,50 @@ def _conditions(
     )
 
 
-def _local_day(tz: str):
-    # 先转成目标时区的本地挂钟时间再取日期。直接对 timestamptz 取日期是按数据库
+def _bucket_expr(tz: str, granularity: Literal["day", "hour"]):
+    # 先转成目标时区的本地挂钟时间再截断。直接对 timestamptz 取日期是按数据库
     # 时区（UTC）截断的，UTC+8 的用户会看到「今天」的数据被切一半到昨天去
-    return LLMRequest.created_at.op("AT TIME ZONE")(tz).cast(Date)
+    local = LLMRequest.created_at.op("AT TIME ZONE")(tz)
+    if granularity == "hour":
+        return func.date_trunc("hour", local)
+    return local.cast(Date)
 
 
-def _day_skeleton(start: datetime, end: datetime, tz: ZoneInfo) -> list[date]:
-    first = start.astimezone(tz).date()
-    # 用 end 前的一微秒定位最后一天：end 常常正好落在某天 0 点（「近 7 天」的 end
+def _bucket_skeleton(
+    start: datetime, end: datetime, tz: ZoneInfo, granularity: Literal["day", "hour"]
+) -> list[date] | list[datetime]:
+    # 用 end 前的一微秒定位最后一个桶：end 常常正好落在某天 0 点（「近 7 天」的 end
     # 就是明天 0 点），直接拿 end 的日期会凭空多补一天
-    last = (end - timedelta(microseconds=1)).astimezone(tz).date()
+    last_moment = (end - timedelta(microseconds=1)).astimezone(tz)
+
+    if granularity == "hour":
+        # 这里必须生成 naive 对象。SQL 侧 AT TIME ZONE 之后返回的是不带时区的墙钟值，
+        # 驱动给过来的是 naive datetime —— 骨架留着 tzinfo 的话，aware 和 naive 相等
+        # 恒为 False（不报错），补零查询会静默全部落空，图上是一条 0 直线
+        first = start.astimezone(tz).replace(minute=0, second=0, microsecond=0, tzinfo=None)
+        last = last_moment.replace(minute=0, second=0, microsecond=0, tzinfo=None)
+
+        hours = []
+        cursor = first
+        while cursor <= last:
+            hours.append(cursor)
+            cursor += timedelta(hours=1)
+        return hours
 
     days = []
-    cursor = first
-    while cursor <= last:
+    cursor = start.astimezone(tz).date()
+    while cursor <= last_moment.date():
         days.append(cursor)
         cursor += timedelta(days=1)
     return days
+
+
+def _label(bucket: date | datetime) -> str:
+    # 按小时的要抹掉秒：datetime.isoformat() 默认给 '2026-10-12T14:00:00'，
+    # 而这是个给人看的标签，不是等着被解析回去的时刻
+    if isinstance(bucket, datetime):
+        return bucket.isoformat(timespec="minutes")
+    return bucket.isoformat()
 
 
 def _previous_period(start: datetime, end: datetime) -> tuple[datetime, datetime]:
@@ -102,28 +113,36 @@ def _avg_latency(value: Decimal | int | None) -> int | None:
     return None if value is None else int(value)
 
 
-def _daily_totals(
+def _percent(part: Decimal | int, total: Decimal | int) -> float:
+    # 区间内一次调用都没有时 total 是 0，这里给 0 —— 直接除会 500
+    if not total:
+        return 0.0
+    return round(float(part) / float(total) * 100, 1)
+
+
+def _bucketed_totals(
     db: Session,
     project_id: int,
     start: datetime,
     end: datetime,
     tz: str,
     value_column,
-) -> dict[date, tuple[int, Decimal]]:
-    """按天汇总「调用次数 + 某个数值列」。没有数据的日期不在这里补，由调用方按骨架填。"""
-    day = _local_day(tz)
+    granularity: Literal["day", "hour"],
+) -> dict[date | datetime, tuple[int, Decimal]]:
+    """按桶汇总「调用次数 + 某个数值列」。空桶不在这里补，由调用方按骨架填。"""
+    bucket = _bucket_expr(tz, granularity)
     rows = db.execute(
         select(
-            day.label("day"),
+            bucket.label("bucket"),
             func.count().label("calls"),
             func.coalesce(func.sum(value_column), 0).label("value"),
         )
         .where(*_conditions(project_id, start, end))
-        .group_by(day)
-        .order_by(day)
+        .group_by(bucket)
+        .order_by(bucket)
     ).all()
 
-    return {row.day: (row.calls, row.value) for row in rows}
+    return {row.bucket: (row.calls, row.value) for row in rows}
 
 
 def get_overview(db: Session, project: Project, query: StatsQuery) -> OverviewOut:
@@ -132,17 +151,6 @@ def get_overview(db: Session, project: Project, query: StatsQuery) -> OverviewOu
 
     current = _summarize(db, project.id, start, end)
     previous = _summarize(db, project.id, prev_start, prev_end)
-
-    # 「最近调用」刻意不按时间选择器过滤：它是这个项目最新发生的调用，
-    # 选了「近 30 天」也不该看不见今天刚上报的那条
-    recent = db.scalars(
-        select(LLMRequest)
-        .options(load_only(*_RECENT_COLUMNS))
-        .where(LLMRequest.project_id == project.id)
-        # 第二排序键 id 不能省：同一毫秒的多条记录只按 created_at 排是不稳定序
-        .order_by(LLMRequest.created_at.desc(), LLMRequest.id.desc())
-        .limit(_RECENT_LIMIT)
-    )
 
     return OverviewOut(
         summary=PeriodMetrics(
@@ -157,27 +165,29 @@ def get_overview(db: Session, project: Project, query: StatsQuery) -> OverviewOu
             cost=float(previous.cost),
             avg_latency=_avg_latency(previous.avg_latency),
         ),
-        recent_logs=[RecentLogItem.model_validate(row) for row in recent],
     )
 
 
 def get_token_stats(db: Session, project: Project, query: StatsQuery) -> TokensOut:
     summary = _summarize(db, project.id, query.start_date, query.end_date)
-    per_day = _daily_totals(
+    totals = _bucketed_totals(
         db,
         project.id,
         query.start_date,
         query.end_date,
         query.tz,
         LLMRequest.total_tokens,
+        query.granularity,
     )
 
     series = []
-    for day in _day_skeleton(query.start_date, query.end_date, query.tzinfo):
-        # 区间内没有调用的日期在这里补成 0：不补的话折线图会从缺失的那天直接连到
-        # 后一天，看起来像「那天也有数据」
-        calls, tokens = per_day.get(day, (0, 0))
-        series.append(TokenPoint(date=day, calls=calls, total_tokens=tokens))
+    for bucket in _bucket_skeleton(
+        query.start_date, query.end_date, query.tzinfo, query.granularity
+    ):
+        # 区间内没有调用的桶在这里补成 0：不补的话折线图会从缺失的那个桶直接连到
+        # 下一个，看起来像「那段时间也有数据」
+        calls, tokens = totals.get(bucket, (0, 0))
+        series.append(TokenPoint(date=_label(bucket), calls=calls, total_tokens=tokens))
 
     return TokensOut(
         summary=TokenSummary(
@@ -192,19 +202,22 @@ def get_token_stats(db: Session, project: Project, query: StatsQuery) -> TokensO
 
 def get_cost_stats(db: Session, project: Project, query: StatsQuery) -> CostsOut:
     summary = _summarize(db, project.id, query.start_date, query.end_date)
-    per_day = _daily_totals(
+    totals = _bucketed_totals(
         db,
         project.id,
         query.start_date,
         query.end_date,
         query.tz,
         LLMRequest.estimated_cost,
+        query.granularity,
     )
 
     series = []
-    for day in _day_skeleton(query.start_date, query.end_date, query.tzinfo):
-        calls, cost = per_day.get(day, (0, 0))
-        series.append(CostPoint(date=day, calls=calls, cost=float(cost)))
+    for bucket in _bucket_skeleton(
+        query.start_date, query.end_date, query.tzinfo, query.granularity
+    ):
+        calls, cost = totals.get(bucket, (0, 0))
+        series.append(CostPoint(date=_label(bucket), calls=calls, cost=float(cost)))
 
     return CostsOut(
         summary=CostSummary(calls=summary.calls, cost=float(summary.cost)),
@@ -229,6 +242,8 @@ def get_model_stats(db: Session, project: Project, query: StatsQuery) -> ModelsO
     ).all()
 
     total_calls = sum(row.calls for row in rows)
+    total_tokens = sum(row.total_tokens for row in rows)
+    total_cost = sum(row.cost for row in rows)
 
     items = [
         ModelUsageItem(
@@ -237,9 +252,10 @@ def get_model_stats(db: Session, project: Project, query: StatsQuery) -> ModelsO
             total_tokens=row.total_tokens,
             cost=float(row.cost),
             avg_latency=_avg_latency(row.avg_latency),
-            # 占比按调用次数算（不是 Token 数），与设计文档 03 的示例口径一致。
             # 各自四舍五入到 1 位，几项加起来可能是 99.9 或 100.1，这是显示口径
-            percentage=round(row.calls / total_calls * 100, 1) if total_calls else 0.0,
+            call_percentage=_percent(row.calls, total_calls),
+            token_percentage=_percent(row.total_tokens, total_tokens),
+            cost_percentage=_percent(row.cost, total_cost),
         )
         for row in rows
     ]

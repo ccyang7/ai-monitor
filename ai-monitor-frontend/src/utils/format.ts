@@ -30,8 +30,10 @@ export function formatNumber(value: number): string {
   return value.toLocaleString('zh-CN')
 }
 
-// 大数字的短写法，给图表轴标签和指标卡用：155,071 挤在轴上会把网格吃掉一半。
-// 用「万 / 亿」而不是 k / M —— 中文语境下 15.5万 比 155k 好读
+// 大数字的短写法，只给图表轴标签用：11,391,234 挤在轴上会把网格吃掉一半。
+// 用「万 / 亿」而不是 k / M —— 中文语境下 15.5万 比 155k 好读。
+// 它会丢精度（1139.1万 抹掉了后面 1234），所以指标卡和 tooltip 这类要读数的
+// 地方一律用 formatNumber
 export function formatCompact(value: number): string {
   const abs = Math.abs(value)
   if (abs >= 100_000_000) return `${(value / 100_000_000).toFixed(1)}亿`

@@ -4,6 +4,9 @@
 export interface StatsParams {
   start_date: string
   end_date: string
+  // 分桶粒度。由 buildTimeRange 按跨度决定：正好一个本地日历日时才是 hour。
+  // 不传后端按 day —— 老调用方不受影响
+  granularity?: 'day' | 'hour'
   // 分桶时区，IANA 名。不传后端按 UTC 切天，UTC+8 的用户会看到「今天」的数据被切一半到昨天
   tz?: string
 }
@@ -16,21 +19,10 @@ export interface PeriodMetrics {
   avg_latency: number | null
 }
 
-export interface RecentLogItem {
-  id: number
-  model: string
-  total_tokens: number
-  latency: number
-  status: 'success' | 'error'
-  created_at: string
-}
-
 export interface OverviewOut {
   summary: PeriodMetrics
   // 上一个等长区间的同口径指标，环比由前端算（不是金额，不涉及精度口径）
   previous: PeriodMetrics
-  // 不用时间选择器过滤：这是项目最新发生的调用，选了近 30 天也不该看不见今天刚上报的
-  recent_logs: RecentLogItem[]
   // 阶段 9 接上之前恒为 null —— 前端据此区分「没异常」和「异常功能还没做」
   anomaly_count: number | null
 }
@@ -43,7 +35,8 @@ export interface TokenSummary {
 }
 
 export interface TokenPoint {
-  // 'YYYY-MM-DD'，不是 ISO 时刻 —— 它就是个日期标签，不要去 new Date() 解析
+  // 按天是 'YYYY-MM-DD'，按小时是 'YYYY-MM-DDTHH:MM' —— 两种情况它都只是个标签，
+  // 不是 ISO 时刻，不要去 new Date() 解析
   date: string
   calls: number
   total_tokens: number
@@ -76,8 +69,11 @@ export interface ModelUsageItem {
   total_tokens: number
   cost: number
   avg_latency: number | null
-  // 服务端算好的，按调用次数占比，各项加起来可能是 99.9 或 100.1（显示口径）
-  percentage: number
+  // 三个口径的占比都由服务端算好，各自四舍五入到 1 位，加起来可能是 99.9 或 100.1。
+  // 前端不要自己拿 calls / cost 去算 —— 金额不做前端运算
+  call_percentage: number
+  token_percentage: number
+  cost_percentage: number
 }
 
 export interface ModelsOut {

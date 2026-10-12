@@ -4,7 +4,7 @@ import * as echarts from 'echarts/core'
 import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { formatCompact } from '@/utils/format'
+import { formatCompact, formatNumber } from '@/utils/format'
 
 // 按需注册：全量 import 'echarts' 会把整个库（含地图、关系图这些用不到的）打进包里，
 // 用到哪几个就注册哪几个
@@ -16,13 +16,15 @@ const props = withDefaults(
     values: number[]
     name: string
     formatValue?: (value: number) => string
+    formatAxis?: (value: number) => string
     type?: 'line' | 'bar'
     height?: string
   }>(),
   {
     type: 'line',
     height: '260px',
-    formatValue: (value: number) => formatCompact(value),
+    formatValue: (value: number) => formatNumber(value),
+    formatAxis: (value: number) => formatCompact(value),
   },
 )
 
@@ -36,9 +38,15 @@ function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 }
 
-// 'YYYY-MM-DD' 在轴上占太宽，去掉年份只留 10-06
-function shortDay(value: string): string {
+// 轴上的标签要短：按天去掉年份只留 10-06，按小时只留 14:00
+function shortLabel(value: string): string {
+  if (value.includes('T')) return value.slice(11, 16)
   return value.length === 10 ? value.slice(5) : value
+}
+
+// tooltip 不比轴拥挤，把日期补全更好认
+function fullLabel(value: string): string {
+  return value.includes('T') ? value.replace('T', ' ') : value
 }
 
 // ECharts 没有从 core 导出这个回调的参数类型，只声明这里用得到的两个字段
@@ -63,7 +71,7 @@ function buildOption(): echarts.EChartsCoreOption {
       formatter: (params: TooltipParam | TooltipParam[]) => {
         const first = Array.isArray(params) ? params[0] : params
         if (!first) return ''
-        return `${first.axisValue}<br/>${props.name}：${props.formatValue(Number(first.value))}`
+        return `${fullLabel(first.axisValue)}<br/>${props.name}：${props.formatValue(Number(first.value))}`
       },
     },
     xAxis: {
@@ -76,7 +84,7 @@ function buildOption(): echarts.EChartsCoreOption {
       axisLabel: {
         color: token('--faint'),
         fontSize: 11,
-        formatter: shortDay,
+        formatter: shortLabel,
       },
     },
     yAxis: {
@@ -87,7 +95,10 @@ function buildOption(): echarts.EChartsCoreOption {
       axisLabel: {
         color: token('--faint'),
         fontSize: 11,
-        formatter: (value: number) => formatCompact(value),
+        // 轴刻度默认是唯一用缩写的地方：完整数字（11,391,234）会把左边距吃到
+        // 十几厘米宽，网格区域被挤没。轴读量级就够，精确值有 tooltip。
+        // 成本图要带 ¥ 前缀，所以留了 formatAxis 给调用方换一套
+        formatter: (value: number) => props.formatAxis(value),
       },
     },
     series: [
@@ -95,6 +106,8 @@ function buildOption(): echarts.EChartsCoreOption {
         type: props.type,
         name: props.name,
         data: props.values,
+        // 近 7 天只有 7 根柱子，不限宽的话每根能摊到一百多像素，看着像色块不像柱状图
+        barMaxWidth: 36,
         // 点太密时会糊成一条边，超过一个月就不画点了
         showSymbol: props.values.length <= 31,
         symbol: 'circle',

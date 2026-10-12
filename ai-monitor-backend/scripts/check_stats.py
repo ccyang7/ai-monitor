@@ -62,7 +62,6 @@ BASE = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
 # 每次成功调用的固定成本：100 输入 * 1 元/百万 + 200 输出 * 2 元/百万
 CHAT_COST = 0.0005
 OV_FIELDS = {"calls", "total_tokens", "cost", "avg_latency"}
-RECENT_FIELDS = {"id", "model", "total_tokens", "latency", "status", "created_at"}
 
 STATS_KINDS = ("overview", "tokens", "costs", "models")
 
@@ -210,7 +209,7 @@ def check_overview_summary() -> None:
     body = stats(token, pid, "overview", start_date=CUR_START, end_date=CUR_END)
 
     expect(
-        set(body.keys()) == {"summary", "previous", "recent_logs", "anomaly_count"},
+        set(body.keys()) == {"summary", "previous", "anomaly_count"},
         f"overview 顶层字段变了：{sorted(body.keys())}",
     )
 
@@ -241,15 +240,6 @@ def check_overview_summary() -> None:
         f"异常数在阶段 9 之前应是 null，实际 {body['anomaly_count']!r}",
     )
 
-    recent = body["recent_logs"]
-    expect(len(recent) == 5, f"最近调用最多 5 条，实际 {len(recent)}")
-    expect(
-        set(recent[0].keys()) == RECENT_FIELDS,
-        f"最近调用字段集合变了：{sorted(recent[0].keys())}",
-    )
-    times = [r["created_at"] for r in recent]
-    expect(times == sorted(times, reverse=True), f"最近调用必须倒序，实际 {times}")
-
 
 def check_period_boundary() -> None:
     """区间左闭右开：正好落在 end 那一刻的记录不属于本区间。"""
@@ -278,25 +268,6 @@ def check_period_boundary() -> None:
     expect(
         body["previous"]["calls"] == 1,
         f"环比区间应收到 end 前最后一微秒那一条，实际 {body['previous']['calls']}",
-    )
-
-
-def check_recent_ignores_range() -> None:
-    """最近调用是「项目最新发生的调用」，不随时间选择器变。"""
-    token = register_and_login("carol")
-    created = new_project(token, "最近调用")
-    pid, key = created["id"], created["api_key"]
-
-    seed_logs(key, [{"timestamp": (CUR_START + timedelta(hours=1)).isoformat()}])
-    newest = seed_logs(
-        key, [{"timestamp": (CUR_END + timedelta(days=5)).isoformat(), "input": "区间外的更新记录"}]
-    )[0]
-
-    body = stats(token, pid, "overview", start_date=CUR_START, end_date=CUR_END)
-    expect(body["summary"]["calls"] == 1, f"区间内只该有 1 条，实际 {body['summary']['calls']}")
-    expect(
-        body["recent_logs"][0]["id"] == newest,
-        "最近调用应包含区间之外的更新记录 —— 选了「近 30 天」也不该看不见刚上报的那条",
     )
 
 
@@ -396,7 +367,16 @@ def check_model_breakdown() -> None:
         [
             {"timestamp": at},
             {"timestamp": at},
-            {"timestamp": at, "provider": "openai", "model": "gpt-4o"},
+            # gpt-4o 显式加大 Token：三次调用都用默认的 100+200 的话，
+            # 「按次数」和「按 Token」会算出同一个占比，这条用例就白测了。
+            # 现在 gpt-4o 只有 1 次调用（25%），Token 却最多（800/1700）
+            {
+                "timestamp": at,
+                "provider": "openai",
+                "model": "gpt-4o",
+                "input_tokens": 400,
+                "output_tokens": 400,
+            },
             # 没配价格的模型：照常写入，成本留空
             {"timestamp": at, "provider": "unknown", "model": "not-priced-yet"},
         ],
@@ -415,7 +395,7 @@ def check_model_breakdown() -> None:
     expect(by_model["deepseek-chat"]["calls"] == 2, "deepseek-chat 应有 2 次")
     expect(by_model["deepseek-chat"]["total_tokens"] == 600, "deepseek-chat Token 不对")
     expect_close(by_model["deepseek-chat"]["cost"], 2 * CHAT_COST, "deepseek-chat 成本")
-    expect(by_model["deepseek-chat"]["percentage"] == 50.0, "占比应为 50%")
+    expect(by_model["deepseek-chat"]["call_percentage"] == 50.0, "按调用次数的占比应为 50%")
 
     # 未知模型的成本是 0 而不是 null：SUM 跳过 NULL、COALESCE 兜底。
     # 也就是说「没配价格」在模型的成本列上会被显示成 0 元 —— 这是设计文档 03 §5
@@ -425,11 +405,23 @@ def check_model_breakdown() -> None:
         f"未收录模型的成本应为 0（NULL 被跳过），实际 {by_model['not-priced-yet']['cost']!r}",
     )
 
-    total = sum(i["percentage"] for i in items)
+    # 三套口径必须是三套数，只算一套再抄给另外两个字段的实现会在这里挂掉：
+    # gpt-4o 调用次数只占 25%，Token 却占 800/1700
     expect(
-        abs(total - 100.0) <= 0.3,
-        f"占比之和应约等于 100（各自四舍五入会有零点几的漂移），实际 {total}",
+        by_model["gpt-4o"]["call_percentage"] == 25.0,
+        f"gpt-4o 按调用次数应占 25%，实际 {by_model['gpt-4o']['call_percentage']}",
     )
+    expect(
+        by_model["gpt-4o"]["token_percentage"] == 47.1,
+        f"gpt-4o 按 Token 应占 47.1%，实际 {by_model['gpt-4o']['token_percentage']}",
+    )
+
+    for field in ("call_percentage", "token_percentage", "cost_percentage"):
+        total = sum(i[field] for i in items)
+        expect(
+            abs(total - 100.0) <= 0.3,
+            f"{field} 之和应约等于 100（各自四舍五入会有零点几的漂移），实际 {total}",
+        )
 
 
 def check_avg_latency_null() -> None:
@@ -476,7 +468,6 @@ def check_empty_project() -> None:
     expect(s["calls"] == 0 and s["total_tokens"] == 0, f"空项目各项应为 0，实际 {s}")
     expect_close(s["cost"], 0.0, "空项目成本")
     expect(s["avg_latency"] is None, "空项目的平均响应应是 null")
-    expect(body["recent_logs"] == [], "没有数据时最近调用应是空数组，不是报错")
     expect(body["previous"]["calls"] == 0, "空项目的环比也应是 0")
 
     tokens = stats(token, pid, "tokens", start_date=start, end_date=end, tz="UTC")
@@ -659,10 +650,167 @@ def check_timezone_param_not_shifted() -> None:
     )
 
 
+def check_hourly_series() -> None:
+    """跨度 1 天 + granularity=hour：24 个点，有调用的那些小时必须有数。"""
+    token = register_and_login("hugo")
+    created = new_project(token, "小时趋势")
+    pid, key = created["id"], created["api_key"]
+
+    start, end = days_span(1)
+    seed_logs(
+        key,
+        [
+            {"timestamp": (start + timedelta(minutes=30)).isoformat()},
+            # 13:59:59 和 14:00:00 分属两个桶：左闭右开在小时粒度上同样成立
+            {"timestamp": (start + timedelta(hours=13, minutes=59, seconds=59)).isoformat()},
+            {"timestamp": (start + timedelta(hours=14)).isoformat()},
+            {"timestamp": (start + timedelta(hours=23, minutes=30)).isoformat()},
+        ],
+    )
+
+    body = stats(
+        token, pid, "tokens", start_date=start, end_date=end, tz="UTC", granularity="hour"
+    )
+
+    series = body["series"]
+    expect(len(series) == 24, f"1 天的小时序列应有 24 个点，实际 {len(series)}")
+    expect(
+        [series[0]["date"], series[-1]["date"]] == ["2026-09-01T00:00", "2026-09-01T23:00"],
+        f"标签首尾不对：{series[0]['date']} … {series[-1]['date']}",
+    )
+
+    # 只数长度抓不出「骨架和 SQL 的桶对不上」—— 那种情况 24 个点一个不少，只是全为 0。
+    # 必须断言有调用的那几格真的有数
+    calls_by_hour = {p["date"]: p["calls"] for p in series}
+    for label in ("2026-09-01T00:00", "2026-09-01T13:00", "2026-09-01T14:00", "2026-09-01T23:00"):
+        expect(
+            calls_by_hour.get(label) == 1,
+            f"{label} 这一格应有 1 次调用，实际 {calls_by_hour.get(label)}",
+        )
+
+    total = sum(calls_by_hour.values())
+    expect(
+        total == 4 and body["summary"]["calls"] == 4,
+        f"区间共 4 次调用，桶内合计 {total}、汇总 {body['summary']['calls']}",
+    )
+    expect(
+        sum(1 for calls in calls_by_hour.values() if calls == 0) == 20,
+        "没有调用的小时必须补 0 而不是缺失",
+    )
+
+    costs = stats(
+        token, pid, "costs", start_date=start, end_date=end, tz="UTC", granularity="hour"
+    )
+    expect(
+        [p["date"] for p in costs["series"]] == [p["date"] for p in series],
+        "costs 与 tokens 的小时标签必须完全一致",
+    )
+
+
+def check_hourly_timezone() -> None:
+    """同一条记录在不同时区落到不同的小时桶，且只落一个。"""
+    token = register_and_login("iris")
+    created = new_project(token, "小时时区")
+    pid, key = created["id"], created["api_key"]
+
+    start, end = days_span(1)
+    # 16:30Z：UTC 下是 09-01 的 16 点，+08:00 下是 09-02 的 0 点
+    seed_logs(key, [{"timestamp": (start + timedelta(hours=16, minutes=30)).isoformat()}])
+
+    def hourly_calls(tz: str) -> dict[str, int]:
+        body = stats(
+            token, pid, "tokens", start_date=start, end_date=end, tz=tz, granularity="hour"
+        )
+        return {p["date"]: p["calls"] for p in body["series"]}
+
+    utc, shanghai = hourly_calls("UTC"), hourly_calls("Asia/Shanghai")
+
+    expect(utc.get("2026-09-01T16:00") == 1, f"UTC 下应落在 16 点桶：{utc.get('2026-09-01T16:00')}")
+    expect(utc.get("2026-09-02T00:00", 0) == 0, "UTC 下不该出现次日 0 点的桶")
+    expect(
+        shanghai.get("2026-09-02T00:00") == 1,
+        f"+08:00 下应落在次日 0 点桶：{shanghai.get('2026-09-02T00:00')}",
+    )
+    expect(shanghai.get("2026-09-01T16:00", 0) == 0, "+08:00 下 16 点不该有数据")
+
+
+def check_granularity_span() -> None:
+    """小时粒度的跨度上限，以及它不会影响 day 的十年上限。"""
+    token = register_and_login("juno")
+    created = new_project(token, "粒度跨度")
+    pid = created["id"]
+
+    start, _ = days_span(1)
+
+    def probe(span: timedelta, granularity: str):
+        return client.get(
+            f"/api/v1/projects/{pid}/stats/tokens",
+            headers=auth(token),
+            params={
+                "start_date": start.isoformat(),
+                "end_date": (start + span).isoformat(),
+                "tz": "UTC",
+                "granularity": granularity,
+            },
+        )
+
+    ok = probe(timedelta(days=1), "hour")
+    expect(ok.status_code == 200, f"正好 1 天的 hour 区间应放行，实际 {ok.status_code}：{ok.text}")
+    expect(len(ok.json()["series"]) == 24, "1 天的 hour 区间应给出 24 个点")
+
+    # 25 小时不是笔误：夏令时秋令退那天，本地日历日就是 25 小时
+    expect(
+        probe(timedelta(days=1, hours=1), "hour").status_code == 200,
+        "25 小时的 hour 区间应放行 —— 夏令时那天的「今日」正好是 25 小时",
+    )
+    r = probe(timedelta(days=1, hours=2), "hour")
+    expect(r.status_code == 422, f"26 小时的 hour 区间应 422，实际 {r.status_code}")
+
+    expect(
+        probe(timedelta(days=3660), "day").status_code == 200,
+        "day 的十年上限不该被 hour 的分支影响",
+    )
+    expect(probe(timedelta(days=3661), "day").status_code == 422, "day 超过十年仍应 422")
+
+
+def check_granularity_default() -> None:
+    """不传 granularity 等同于 day，与这次改动之前逐点一致；非法值一律 422。"""
+    token = register_and_login("karl")
+    created = new_project(token, "粒度默认")
+    pid, key = created["id"], created["api_key"]
+
+    start, end = days_span(3)
+    seed_logs(key, [{"timestamp": (start + timedelta(hours=1)).isoformat()}])
+
+    implicit = stats(token, pid, "tokens", start_date=start, end_date=end, tz="UTC")
+    explicit = stats(
+        token, pid, "tokens", start_date=start, end_date=end, tz="UTC", granularity="day"
+    )
+    expect(implicit == explicit, "不传 granularity 与显式传 day 的结果必须一致")
+    expect(
+        [p["date"] for p in implicit["series"]] == ["2026-09-01", "2026-09-02", "2026-09-03"],
+        f"默认仍应按天：{[p['date'] for p in implicit['series']]}",
+    )
+
+    for bad in ("minute", "DAY", "", "Hour", "1h"):
+        r = client.get(
+            f"/api/v1/projects/{pid}/stats/tokens",
+            headers=auth(token),
+            params={
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "granularity": bad,
+            },
+        )
+        expect(
+            r.status_code == 422,
+            f"granularity={bad!r} 应 422，实际 {r.status_code}：{r.text}",
+        )
+
+
 CHECKS = [
-    ("概览：区间汇总 + 环比是上一个等长区间 + 最近调用", check_overview_summary),
+    ("概览：区间汇总 + 环比是上一个等长区间", check_overview_summary),
     ("区间左闭右开：落在 end 那一刻的记录不算", check_period_boundary),
-    ("最近调用不随时间选择器变", check_recent_ignores_range),
     ("Token 统计：汇总 + 按天序列 + 缺失日期补零", check_token_series_gapfill),
     ("成本统计：汇总与序列口径一致", check_cost_series),
     ("模型分布：分组 / 占比 / 未收录模型成本为 0", check_model_breakdown),
@@ -672,6 +820,10 @@ CHECKS = [
     ("★ 用户隔离：跨项目 404、跨用户 404、未登录 401", check_isolation),
     ("边界校验（422 而不是 500）", check_validation),
     ("时间参数：不带时区按 UTC 解释（与上报一致）", check_timezone_param_not_shifted),
+    ("小时粒度：24 个点 + 桶内有数 + 空小时补零", check_hourly_series),
+    ("小时粒度：时区分桶（同一条记录落不同的桶）", check_hourly_timezone),
+    ("粒度跨度：hour 上限 1 天（含夏令时余量），day 仍是十年", check_granularity_span),
+    ("粒度默认值：不传等于 day，非法值一律 422", check_granularity_default),
 ]
 
 
