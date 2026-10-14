@@ -1,6 +1,8 @@
 """应用配置：从环境变量和 .env 读取，并守卫 JWT 密钥强度。"""
 
-from pydantic import model_validator
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # HS256 的密钥短于哈希输出（32 字节）时签名空间变小，RFC 7518 §3.2 建议 32 字节起
@@ -32,6 +34,18 @@ class Settings(BaseSettings):
     error_rate_threshold: float = 0.2
     # 样本少于这个数就不判定 —— 两条历史记录算出来的「平均值」谁信谁误报
     baseline_min_samples: int = 10
+
+    # AI 分析助手（阶段 11-12）。这一组刻意不设启动守卫，与 JWT_SECRET_KEY 相反而为：
+    # 登录是核心链路，密钥弱就该拒启；助手是增值功能，没配 Key 只影响它自己
+    # （聊天接口返回 503），不该拖着整个平台起不来
+    llm_base_url: str = "https://api.deepseek.com/v1"
+    llm_api_key: str = ""
+    llm_model: str = "deepseek-v4-flash"
+    llm_temperature: float = 0.3
+    assistant_timezone: str = "Asia/Shanghai"
+    # 一次问答通常 2~5 轮工具调用。设上限是防失控：模型反复调工具不给答案时，
+    # 一次坏请求能长时间占着连接烧 Token
+    assistant_max_tool_rounds: int = 10
 
     # .env 按「启动目录」找，不是按本文件位置 —— 约定从 ai-monitor-backend/ 启动服务
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
@@ -65,6 +79,17 @@ class Settings(BaseSettings):
             return self
 
         raise ValueError(message)
+
+    @field_validator("assistant_timezone")
+    @classmethod
+    def _check_assistant_timezone(cls, value: str) -> str:
+        # 时区名写错的话，工具的每个日期换算都会在运行时抛异常（每条请求 500）。
+        # 挪到启动时一次性拒掉，错在哪儿一目了然
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError(f"assistant_timezone 不是合法的时区名：{value}") from None
+        return value
 
     @staticmethod
     def _warn(message: str) -> None:

@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
     "bcrypt>=5.0.0",
     "fastapi>=0.143.0",
+    "langchain>=1.4.5",
+    "langchain-openai>=1.7.1",
     "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.15.0",
     "pyjwt>=2.13",
