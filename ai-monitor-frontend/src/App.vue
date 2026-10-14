@@ -7,6 +7,10 @@ import { themeOverrides } from '@/theme'
 
 const route = useRoute()
 const isLoginPage = computed(() => route.name === 'login')
+
+// 切项目时子路由没变（/projects/13/logs → /projects/18/logs），RouterView 会复用同一个
+// 组件实例，而四个项目页的数据都写在 onMounted 里 —— 不给 key 就只会一直显示上一个项目的数据
+const viewKey = computed(() => String(route.params.projectId ?? ''))
 </script>
 
 <template>
@@ -14,7 +18,7 @@ const isLoginPage = computed(() => route.name === 'login')
     <NMessageProvider>
       <RouterView v-if="isLoginPage" />
       <AppShell v-else>
-        <RouterView />
+        <RouterView :key="viewKey" />
       </AppShell>
     </NMessageProvider>
   </NConfigProvider>
