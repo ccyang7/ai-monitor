@@ -38,8 +38,7 @@ async function copy(): Promise<void> {
     </div>
 
     <p class="key-reveal-hint">
-      关掉这个提示后就再也看不到了 —— 服务端只存了它的哈希，我们自己也没法还原。
-      丢了就重新生成一个。
+      关掉这个提示后就再也看不到了 —— 服务端只存了它的哈希，我们自己也没法还原。丢了就重新生成一个。
     </p>
   </div>
 </template>

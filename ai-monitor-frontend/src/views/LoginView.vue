@@ -110,8 +110,7 @@ async function submit(): Promise<void> {
           <span>接入项目后，这里是你每天看到的简报</span>
         </div>
         <p class="sample-text">
-          今天调用 <b>145 次</b>，比昨天多 32%。deepseek-chat 占 <b>82%</b>，费用 ¥12.40。
-          有 <b>2 次异常</b>调用已标出。
+          今天调用 <b>145 次</b>，比昨天多 32%。deepseek-chat 占 <b>82%</b>，费用 ¥12.40。有 <b>2 次异常</b>调用已标出。
         </p>
       </div>
     </section>

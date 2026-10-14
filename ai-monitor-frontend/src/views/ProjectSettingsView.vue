@@ -408,8 +408,7 @@ async function confirmDelete(): Promise<void> {
         删除项目
       </h2>
       <p class="danger-desc">
-        删除后，这个项目的所有调用记录、统计数据、API Key 都会被一并删除，无法恢复。
-        已经接入的项目会立刻停止上报。
+        删除后，这个项目的所有调用记录、统计数据、API Key 都会被一并删除，无法恢复。已经接入的项目会立刻停止上报。
       </p>
       <button class="btn btn-danger" type="button" @click="showDelete = true">
         删除这个项目
@@ -433,8 +432,7 @@ async function confirmDelete(): Promise<void> {
     </div>
 
     <p class="modal-text">
-      Key <code class="code">{{ keyToRevoke.key_prefix }}…</code> 将被标记为已吊销，
-      不能恢复。你需要生成一把新的并更新接入方配置。
+      Key <code class="code">{{ keyToRevoke.key_prefix }}…</code> 将被标记为已吊销，不能恢复。你需要生成一把新的并更新接入方配置。
     </p>
 
     <div class="modal-actions">
@@ -462,8 +460,7 @@ async function confirmDelete(): Promise<void> {
 
     <div class="modal-body">
       <p class="modal-text">
-        项目 <b>{{ project?.name }}</b> 及其所有调用记录、API Key 都会被删除。
-        输入项目名以确认。
+        项目 <b>{{ project?.name }}</b> 及其所有调用记录、API Key 都会被删除。输入项目名以确认。
       </p>
       <div class="field">
         <input
