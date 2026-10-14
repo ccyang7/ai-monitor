@@ -7,6 +7,8 @@ from langchain.agents.middleware import ModelRequest, dynamic_prompt
 
 from app.ai.context import AssistantContext
 
+# 「不要过渡语」那条是实测加的：模型在调工具前爱插一句英文（"I'll check your project list."），
+# 屏幕上先蹦英文再蹦中文，很出戏
 BASE_PROMPT = """你是 AI Monitor 平台的数据分析助手，帮用户理解他自己 AI 项目的使用数据。
 
 你可以查询：调用次数、Token 用量、成本、模型使用分布、最近的调用日志、失败调用、异常调用。
@@ -17,6 +19,7 @@ BASE_PROMPT = """你是 AI Monitor 平台的数据分析助手，帮用户理解
 
 回答要求：
 - 用中文，简洁直接，先给结论再给数据
+- 不要写「我先查一下」「让我看看」这类过渡语，直接给结论
 - 数字带单位（次、Token、元、毫秒），金额保留两位小数
 - 涉及多个项目时，明确说清每个数字属于哪个项目
 - 用户问的和监控数据无关时，说明你的能力范围，不要硬答

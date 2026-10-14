@@ -4,11 +4,13 @@ from uuid import uuid4
 
 import openai
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 
 from app.ai.agent import agent, recursion_limit
 from app.ai.context import AssistantContext
+from app.ai.stream import stream_chat
 from app.config import settings
 from app.deps import get_current_user
 from app.models import User
@@ -17,25 +19,33 @@ from app.schemas.chat import ChatIn, ChatOut, ToolCallItem
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.post("", summary="向 AI 助手提问（非流式）")
-async def chat(
-    payload: ChatIn,
-    current_user: User = Depends(get_current_user),
-) -> ChatOut:
+def _prepare(payload: ChatIn, user: User) -> tuple[str, AssistantContext]:
+    # 前端传来的只是本地会话标识，前缀由服务端拼：伪造别人的 uuid，拼出来也只会落在自己名下。
+    # 校验「这串 id 是不是你的」总有漏掉的分支，拼接让别人的会话根本没有构造出来的途径（设计 §5.1）
+    thread_id = f"user_{user.id}_{payload.thread_id or uuid4()}"
+    ctx = AssistantContext(
+        user_id=user.id,
+        timezone=settings.assistant_timezone,
+        current_project=payload.current_project,
+    )
+    return thread_id, ctx
+
+
+def _require_api_key() -> None:
     # 没配 Key 只影响助手自己（T1.2 的决策）：返回 503，不拖着整个平台启动不了
     if not settings.llm_api_key:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "AI 助手未配置模型服务"
         )
 
-    # 前端传来的只是本地会话标识，前缀由服务端拼：伪造别人的 uuid，拼出来也只会落在自己名下。
-    # 校验「这串 id 是不是你的」总有漏掉的分支，拼接让别人的会话根本没有构造出来的途径（设计 §5.1）
-    thread_id = f"user_{current_user.id}_{payload.thread_id or uuid4()}"
-    ctx = AssistantContext(
-        user_id=current_user.id,
-        timezone=settings.assistant_timezone,
-        current_project=payload.current_project,
-    )
+
+@router.post("", summary="向 AI 助手提问（非流式）")
+async def chat(
+    payload: ChatIn,
+    current_user: User = Depends(get_current_user),
+) -> ChatOut:
+    _require_api_key()
+    thread_id, ctx = _prepare(payload, current_user)
 
     try:
         result = await agent.ainvoke(
@@ -67,3 +77,23 @@ async def chat(
         for call in message.tool_calls
     ]
     return ChatOut(thread_id=thread_id, reply=reply, tool_calls=tool_calls)
+
+
+@router.post("/stream", summary="向 AI 助手提问（SSE 流式）")
+async def chat_stream(
+    payload: ChatIn,
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    _require_api_key()
+    thread_id, ctx = _prepare(payload, current_user)
+
+    # 状态码在流开始前就定死了：跑到一半才出的错（模型断了、超轮次）改不了状态码，
+    # 只能由 stream_chat 发 error 事件 —— 前端不能只看 response.ok
+    return StreamingResponse(
+        stream_chat(payload.message, ctx, thread_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # 以后挂到 nginx 后面时，别让它把流缓冲成一坨
+        },
+    )
