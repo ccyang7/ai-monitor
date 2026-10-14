@@ -7,6 +7,7 @@ import { useProjectsStore } from '@/stores/projects'
 import type { ChatEvent, ChatMessage } from '@/types/chat'
 
 const THREAD_KEY = 'ai-monitor:chat-thread'
+const WIDE_KEY = 'ai-monitor:chat-wide'
 
 // html:false 是安全边界，不是风格选择 —— 模型输出不可信，允许原始 HTML 就是开了一个注入口
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
@@ -22,6 +23,9 @@ const route = useRoute()
 const projects = useProjectsStore()
 
 const open = ref(false)
+// 宽度存 localStorage 而 thread_id 存 sessionStorage：宽度是人的偏好（换个标签页也该记住），
+// 会话是本次浏览的
+const wide = ref(localStorage.getItem(WIDE_KEY) === '1')
 const messages = ref<ChatMessage[]>([])
 const input = ref('')
 const sending = ref(false)
@@ -152,6 +156,11 @@ function newChat(): void {
   sessionStorage.setItem(THREAD_KEY, threadId.value)
 }
 
+function toggleWide(): void {
+  wide.value = !wide.value
+  localStorage.setItem(WIDE_KEY, wide.value ? '1' : '0')
+}
+
 function onEnter(event: KeyboardEvent): void {
   // 中文输入法用 Enter 确认候选词时也会触发 keydown，这时绝不能当发送
   if (event.isComposing || event.shiftKey) return
@@ -168,12 +177,33 @@ function onEnter(event: KeyboardEvent): void {
     </svg>
   </button>
 
-  <section v-else class="ai-panel">
+  <section v-else class="ai-panel" :class="{ 'is-wide': wide }">
     <header class="ai-head">
       <span class="ai-head-dot" />
       <span class="ai-head-title">AI 助手</span>
       <span v-if="currentProject" class="ai-head-scope" :title="currentProject">{{ currentProject }}</span>
       <button class="ai-head-btn" type="button" :disabled="sending" @click="newChat">新对话</button>
+      <button
+        class="ai-head-btn is-icon"
+        type="button"
+        :title="wide ? '收窄' : '加宽'"
+        @click="toggleWide"
+      >
+        <svg v-if="wide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="4 14 10 14 10 20" />
+          <polyline points="20 10 14 10 14 4" />
+          <line x1="14" y1="10" x2="21" y2="3" />
+          <line x1="3" y1="21" x2="10" y2="14" />
+        </svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9" />
+          <polyline points="9 21 3 21 3 15" />
+          <line x1="21" y1="3" x2="14" y2="10" />
+          <line x1="3" y1="21" x2="10" y2="14" />
+        </svg>
+      </button>
       <button class="ai-head-btn is-icon" type="button" title="收起" @click="open = false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
              stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
@@ -261,6 +291,13 @@ function onEnter(event: KeyboardEvent): void {
   border-radius: var(--r-lg);
   box-shadow: 0 12px 42px rgba(11, 35, 28, 0.24);
   overflow: hidden;
+  transition: width 0.18s ease;
+}
+
+/* 宽档是给表格用的：窄档下 5 列表格每列都在换行。
+   小屏仍被上面的 max-width 兜住 */
+.ai-panel.is-wide {
+  width: 760px;
 }
 
 .ai-head {
