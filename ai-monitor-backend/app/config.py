@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # （聊天接口返回 503），不该拖着整个平台起不来
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_api_key: str = ""
-    llm_model: str = "deepseek-v4-flash"
+    llm_model: str = "deepseek-flash"
     llm_temperature: float = 0.3
     assistant_timezone: str = "Asia/Shanghai"
     # 一次问答通常 2~5 轮工具调用。设上限是防失控：模型反复调工具不给答案时，
