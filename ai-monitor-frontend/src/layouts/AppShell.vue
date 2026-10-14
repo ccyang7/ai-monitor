@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AiAssistant from '@/components/AiAssistant.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'
 import { initials } from '@/utils/format'
@@ -95,5 +96,7 @@ function logout(): void {
     <main class="main">
       <slot />
     </main>
+
+    <AiAssistant />
   </div>
 </template>
