@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class Project(Base, TimestampMixin):
     __tablename__ = "projects"
 
-    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 001_init.sql
+    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 sql/schema.sql
     __table_args__ = (
         CheckConstraint("status IN ('active', 'archived')", name="ck_projects_status"),
     )

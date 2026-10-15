@@ -577,10 +577,9 @@ def main() -> int:
     except ProgrammingError as exc:
         print("❌ 测试库里还没有 models 表\n")
         print(f"原始错误：{exc.orig}\n")
-        print("把建表脚本跑在测试库上（001、002、004、005 都要）：")
+        print("把建表脚本跑在测试库上：")
         print("   psql -U ai_monitor -d ai_monitor_test -h 127.0.0.1 \\")
-        print("     -f sql/004_cache_pricing.sql")
-        print("     -f sql/005_models_unique_active.sql")
+        print("     -f sql/schema.sql")
         return 1
 
     failures: list[str] = []

@@ -525,14 +525,14 @@ def main() -> int:
         print()
         print("然后把建表脚本跑在这个库上：")
         print("   docker exec -i <容器名> psql -U ai_monitor -d ai_monitor_test -h 127.0.0.1 \\")
-        print("     -f /tmp/001_init.sql")
+        print("     -f /tmp/schema.sql")
         return 1
     except ProgrammingError as exc:
         print("❌ 测试库里还没有表\n")
         print(f"原始错误：{exc.orig}\n")
         print("在测试库上跑一遍建表脚本：")
         print("   docker exec -i <容器名> psql -U ai_monitor -d ai_monitor_test -h 127.0.0.1 \\")
-        print("     -f /tmp/001_init.sql")
+        print("     -f /tmp/schema.sql")
         return 1
 
     failures: list[str] = []

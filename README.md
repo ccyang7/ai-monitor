@@ -27,7 +27,7 @@
 ai-monitor-backend/     FastAPI 后端
   app/                  业务代码（api / services / models / schemas / ai）
   scripts/              验收脚本（check_*.py）与数据初始化脚本
-  sql/                  建表 SQL（按编号顺序执行）
+  sql/                  建表 SQL：schema.sql 完整版 + migrations/ 增量脚本
 ai-monitor-frontend/    Vue 3 前端
 prototype/              早期的 HTML 页面原型
 docs/                   开发文档（需求 / 设计 / 实施计划 / 使用手册）
@@ -45,11 +45,11 @@ docs/                   开发文档（需求 / 设计 / 实施计划 / 使用�
 
 ### 1. 建库建表
 
-创建数据库 `ai_monitor`，然后按编号顺序执行建表脚本：
+创建数据库 `ai_monitor`，然后执行建表脚本：
 
 ```bash
 cd ai-monitor-backend
-for f in sql/00*.sql; do psql -d ai_monitor -f "$f"; done
+psql -d ai_monitor -f sql/schema.sql
 ```
 
 ### 2. 启动后端

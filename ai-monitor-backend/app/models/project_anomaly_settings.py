@@ -9,7 +9,7 @@ from app.models.base import Base, TimestampMixin
 class ProjectAnomalySettings(Base, TimestampMixin):
     __tablename__ = "project_anomaly_settings"
 
-    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 003 脚本
+    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 sql/schema.sql
     __table_args__ = (
         CheckConstraint(
             "token_anomaly_ratio IS NULL OR token_anomaly_ratio BETWEEN 1.5 AND 20",

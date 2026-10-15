@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class Model(Base, TimestampMixin):
     __tablename__ = "models"
 
-    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 002 脚本
+    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 sql/schema.sql
     __table_args__ = (
         CheckConstraint("status IN ('active', 'disabled')", name="ck_models_status"),
         CheckConstraint(

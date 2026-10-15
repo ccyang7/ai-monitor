@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
-# 只做映射不做建表（不调用 Base.metadata.create_all()）：表由 sql/001_init.sql 创建，
+# 只做映射不做建表（不调用 Base.metadata.create_all()）：表由 sql/schema.sql 创建，
 # 改结构要同时改那边
 class Base(DeclarativeBase):
     pass

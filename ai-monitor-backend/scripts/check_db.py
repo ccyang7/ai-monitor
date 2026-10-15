@@ -114,7 +114,7 @@ def main() -> int:
     if missing:
         print(f"❌ 缺少这些表：{', '.join(missing)}\n")
         print("在虚拟机上执行建表脚本：")
-        print("   psql -U ai_monitor -d ai_monitor -f 001_init.sql")
+        print("   psql -U ai_monitor -d ai_monitor -f sql/schema.sql")
         return 1
 
     print("✅ 三张表都在")
@@ -198,7 +198,7 @@ def main() -> int:
         print("       -c \"ALTER TABLE api_keys OWNER TO ai_monitor;\"")
         print()
         print("   删表重建也行（表里没数据时最干净），")
-        print("   重建时要用 ai_monitor 执行 001_init.sql，别再用 postgres。")
+        print("   重建时要用 ai_monitor 执行 sql/schema.sql，别再用 postgres。")
         return 1
 
     print("✅ 读写权限正常")
@@ -236,7 +236,7 @@ def main() -> int:
     if drifted:
         print("=" * 62)
         print(f"⚠️ 这些表和 ORM 模型对不上：{', '.join(drifted)}")
-        print("   改表结构要同时改两处：sql/001_init.sql 和 app/models/")
+        print("   改表结构要同时改三处：sql/schema.sql、sql/migrations/ 和 app/models/")
         return 1
 
     print("=" * 62)

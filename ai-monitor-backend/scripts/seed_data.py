@@ -192,6 +192,6 @@ if __name__ == "__main__":
         sys.exit(1)
     except ProgrammingError as exc:
         print("❌ 数据库里还没有 llm_requests / models 表，先执行建表脚本：")
-        print("   psql -U ai_monitor -d ai_monitor -h 127.0.0.1 -f sql/002_models_and_llm_requests.sql")
+        print("   psql -U ai_monitor -d ai_monitor -h 127.0.0.1 -f sql/schema.sql")
         print(f"   原始错误：{exc.orig}")
         sys.exit(1)
