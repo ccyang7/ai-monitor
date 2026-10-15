@@ -322,6 +322,16 @@
   font-weight: 650;
 }
 
+/* 需要用户动手的提示条：与 .tag.is-warn 同一语义，沿用项目既有的琥珀字面量 */
+.note.is-warn {
+  background: var(--amber-bg);
+  border-color: #f3dfb8;
+}
+
+.note.is-warn svg {
+  color: var(--amber);
+}
+
 /* --- 状态标签 --- */
 
 .tag {

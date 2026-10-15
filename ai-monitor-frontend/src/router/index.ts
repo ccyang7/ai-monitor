@@ -14,6 +14,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/HomeView.vue'),
   },
   {
+    // 模型管理挂在账号层而不是项目层：内置模型人人可见，自建模型属于账号而非某个项目
+    path: '/models',
+    name: 'models',
+    component: () => import('@/views/ModelsView.vue'),
+  },
+  {
     // 项目下的子页，靠 ProjectTabs 互相切换。概览是这个项目的落地页，
     // 侧边栏和首页的项目入口都指向它
     path: '/projects/:projectId',

@@ -61,6 +61,19 @@ function logout(): void {
           <span>首页</span>
         </RouterLink>
 
+        <RouterLink
+          class="nav-item"
+          :class="{ 'is-active': route.name === 'models' }"
+          :to="{ name: 'models' }"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l8 4.6v8.8L12 21l-8-4.6V7.6z" />
+            <path d="M12 12l8-4.6M12 12v9M12 12L4 7.4" />
+          </svg>
+          <span>模型管理</span>
+        </RouterLink>
+
         <template v-if="projects.items.length">
           <div class="nav-label">我的项目</div>
           <RouterLink

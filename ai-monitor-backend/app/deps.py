@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApiKey, LLMRequest, Project, User
+from app.models import ApiKey, LLMRequest, Model, Project, User
 from app.security import decode_access_token, hash_api_key
 
 # auto_error=False：没带 token 时自己抛，好统一错误信息风格。
@@ -99,6 +99,33 @@ def get_own_log(
     if log is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="日志不存在")
     return log
+
+
+def get_visible_model(
+    model_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Model:
+    # 读的语义：内置模型人人可见，自建模型只有主人可见 —— 与列表接口的可见性过滤
+    # 是同一条规则。内置模型是公开数据，详情接口把它藏成 404 没有任何安全收益
+    model = db.scalar(
+        select(Model).where(
+            Model.id == model_id,
+            Model.status == "active",
+            or_(Model.is_builtin.is_(True), Model.owner_id == user.id),
+        )
+    )
+    if model is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="模型不存在")
+    return model
+
+
+def get_own_model(model: Model = Depends(get_visible_model)) -> Model:
+    # 写的语义：只认自建。能走到这里说明可见性已过（内置 或 本人自建），
+    # 所以「是自建」就等价于「是本人的」—— 内置模型所有用户共享，改一次影响全平台的成本基准
+    if model.is_builtin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="模型不存在")
+    return model
 
 
 def get_api_key_project(
