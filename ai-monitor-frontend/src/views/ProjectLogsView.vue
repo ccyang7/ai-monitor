@@ -237,6 +237,7 @@ onMounted(load)
               <th style="padding-left: 0">时间</th>
               <th>模型</th>
               <th class="num">输入 Token</th>
+              <th class="num">缓存命中</th>
               <th class="num">输出 Token</th>
               <th class="num">总 Token</th>
               <th class="num">耗时</th>
@@ -250,6 +251,7 @@ onMounted(load)
               <td class="time" style="padding-left: 0">{{ formatDateTime(row.created_at) }}</td>
               <td class="model">{{ row.model }}</td>
               <td class="num">{{ formatNumber(row.input_tokens) }}</td>
+              <td class="num">{{ formatNumber(row.cache_hit_tokens) }}</td>
               <td class="num">{{ formatNumber(row.output_tokens) }}</td>
               <td class="num">{{ formatNumber(row.total_tokens) }}</td>
               <td class="num">{{ formatLatency(row.latency) }}</td>
