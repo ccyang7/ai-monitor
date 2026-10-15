@@ -20,6 +20,8 @@ TOOL_LABELS = {
     "get_recent_logs": "查询最近调用",
     "get_error_logs": "查询失败调用",
     "analyze_anomalies": "分析异常调用",
+    "list_models": "查询模型与价格",
+    "search_web": "联网搜索",
 }
 
 

@@ -6,12 +6,14 @@ from zoneinfo import ZoneInfo
 from langchain.agents.middleware import ModelRequest, dynamic_prompt
 
 from app.ai.context import AssistantContext
+from app.config import settings
 
 # 「不要过渡语」那条是实测加的：模型在调工具前爱插一句英文（"I'll check your project list."），
 # 屏幕上先蹦英文再蹦中文，很出戏
 BASE_PROMPT = """你是 AI Monitor 平台的数据分析助手，帮用户理解他自己 AI 项目的使用数据。
 
-你可以查询：调用次数、Token 用量、成本、模型使用分布、最近的调用日志、失败调用、异常调用。
+你可以查询：调用次数、Token 用量、成本、模型使用分布、最近的调用日志、失败调用、异常调用、
+平台里配置的模型清单与价格。
 所有数字都必须来自工具查询，不许凭推测或记忆编造；工具查不到就如实说查不到。
 
 数据边界（最重要的一条）：你只能查询当前用户自己的项目。这不是建议，是硬约束 ——
@@ -37,6 +39,26 @@ BASE_PROMPT = """你是 AI Monitor 平台的数据分析助手，帮用户理解
 4. 完全没把握时，先调用 list_projects 查看项目清单再提问。
 """
 
+# 有 Key 才挂上：没配 Key 时 search_web 根本不在工具清单里，说它「可以联网搜索」
+# 就是教模型撒谎
+WEB_SEARCH_PROMPT = """
+
+联网搜索（工具 search_web）：
+- 平台查不到的信息（厂商最新定价、模型发布时间等）可以联网搜索
+- 引用搜索结果里的数字时，必须附上来源链接；引用处标注「以下为网络搜索的参考信息，
+  请自行核对」—— 搜索结果可能过期或搜错，不是平台数据那样的实锤
+- 币种照抄来源，不要自己换算汇率
+- 搜不到、或几条结果互相矛盾时，如实说明并列出差异，不许挑一个数字凑答案
+- 用户要你把搜到的价格「存进去 / 改一下」时，告诉他去「模型管理」页手动填写 ——
+  你没有任何写工具，也绝不能报一个数字说成已经改好了
+"""
+
+NO_WEB_SEARCH_PROMPT = """
+
+你没有联网搜索能力。用户问平台之外的信息（如厂商官网最新定价）时，如实说明这一点，
+不要凭训练记忆报价格 —— 那种数字既没来源也不保证时效。
+"""
+
 
 @dynamic_prompt
 def build_prompt(request: ModelRequest) -> str:
@@ -48,6 +70,7 @@ def build_prompt(request: ModelRequest) -> str:
 当前时间：{now:%Y-%m-%d %H:%M}（时区 {ctx.timezone}）。
 用户提问里的「今天」「上周」等相对时间，按这个当前时间换算成具体日期。
 """
+    prompt += WEB_SEARCH_PROMPT if settings.tavily_api_key else NO_WEB_SEARCH_PROMPT
     if ctx.current_project:
         prompt += (
             f"\n用户当前正在查看项目「{ctx.current_project}」，"

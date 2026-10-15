@@ -1,5 +1,6 @@
 """工具层验收：用手写参数直接调用八个 AI 工具，重点验证用户隔离与边界处理。"""
 
+import inspect
 import json
 import os
 import re
@@ -69,6 +70,11 @@ BUILTIN_MODELS = [
 # 每次成功调用的固定成本：100 输入 * 1 元/百万 + 200 输出 * 2 元/百万
 CHAT_COST = 0.0005
 
+# 联网搜索的上限写死在验收里（不引 ai/tools.py 的常量）：哪天有人把上限改成 8 条，
+# 这里必须先红一次，而不是跟着实现一起悄悄变
+MAX_EXPECTED_RESULTS = 5
+MAX_EXPECTED_SNIPPET = 1000
+
 # 数据都种在 9 月：落在「近 7 天」基线窗口之外，异常判定结果与跑脚本的日期无关
 DAY = datetime(2026, 9, 10, 0, 0, tzinfo=timezone.utc)
 DAY_STR = "2026-09-10"
@@ -134,6 +140,19 @@ def new_project(token: str, name: str) -> dict:
     return r.json()
 
 
+def post_model(token: str, **overrides) -> dict:
+    payload = {
+        "provider": "deepseek",
+        "model_name": "自建模型",
+        "input_price": "1.5",
+        "output_price": "3",
+    }
+    payload.update(overrides)
+    r = client.post("/api/v1/models", headers=auth(token), json=payload)
+    expect(r.status_code == 201, f"创建模型应返回 201，实际 {r.status_code}：{r.text}")
+    return r.json()
+
+
 def ingest(key: str, **overrides):
     payload = {
         "provider": "deepseek",
@@ -179,7 +198,11 @@ def call_tool(tool_obj, ctx: AssistantContext, **kwargs):
         store=None,
         tools=[],
     )
-    return tool_obj.func(runtime=runtime, **kwargs)
+    # search_web 签名里没有 ToolRuntime（它不碰平台数据，没有要注入的用户身份），
+    # 给它硬塞 runtime= 会 TypeError
+    if "runtime" in inspect.signature(tool_obj.func).parameters:
+        kwargs["runtime"] = runtime
+    return tool_obj.func(**kwargs)
 
 
 def check_own_project_data() -> None:
@@ -475,6 +498,104 @@ def check_limit_clamp() -> None:
     )
 
 
+def check_list_models() -> None:
+    """用例 10：list_models 列内置 + 自己的自建，别人的自建一条都不带。"""
+    uid_a, token_a = a_user("alice")
+    _, token_b = a_user("bob")
+    post_model(token_a, model_name="alice-自建", cache_hit_price="0.2")
+    post_model(token_b, model_name="bob-自建")
+
+    project = new_project(token_a, "Alice 项目")
+    seed_logs(project["api_key"], [{"timestamp": (DAY + timedelta(hours=1)).isoformat()}])
+
+    got = call_tool(ai_tools.list_models, ctx_for(uid_a))
+    by_name = {item["model_name"]: item for item in got["models"]}
+    expect(
+        set(by_name) == {"deepseek-chat", "gpt-4o", "alice-自建"},
+        f"应列出内置模型 + 自己的自建，实际 {sorted(by_name)}",
+    )
+
+    mine = by_name["alice-自建"]
+    expect(mine["source"] == "自建", f"来源标错：{mine['source']}")
+    expect_close(mine["input_price_cny_per_million"], 1.5, "自建模型输入价")
+    expect_close(mine["output_price_cny_per_million"], 3.0, "自建模型输出价")
+    expect_close(mine["cache_hit_price_cny_per_million"], 0.2, "自建模型缓存命中价")
+
+    builtin = by_name["deepseek-chat"]
+    expect(builtin["source"] == "内置", f"内置模型来源标错：{builtin['source']}")
+    expect(
+        builtin["cache_hit_price_cny_per_million"] is None,
+        f"内置模型没配缓存价，应是 null 而不是 0：{builtin}",
+    )
+    expect(
+        builtin["used_by_projects"] == ["Alice 项目"],
+        f"「在用的项目」应来自上报数据，实际 {builtin['used_by_projects']}",
+    )
+
+
+def check_search_web() -> None:
+    """用例 11：没配 Key 时 search_web 不进工具清单；配了之后结构固定、条数封顶。"""
+    original_key = settings.tavily_api_key
+
+    settings.tavily_api_key = ""
+    try:
+        names = [tool_obj.name for tool_obj in ai_tools.build_tools()]
+        expect(
+            "search_web" not in names,
+            f"没配 Key 时 search_web 不该出现在工具清单里（模型会看到它）：{names}",
+        )
+    finally:
+        settings.tavily_api_key = original_key
+
+    names = [tool_obj.name for tool_obj in ai_tools.build_tools()]
+    expect("search_web" in names, f"配了 Key 时 search_web 应该在清单里，实际 {names}")
+
+    # 返回结构不靠真打网络来验：把打网络的那一层换掉，用例才是确定性的、也不吃配额。
+    # 真实联网在批次 4 的浏览器验收里单独走一遍
+    fake_results = [
+        # 正文故意给得比上限长，才能验出「截断」这一步确实生效
+        {"title": f"结果 {i}", "url": f"https://example.com/{i}", "content": "长" * 1500}
+        for i in range(8)
+    ]
+    original_search = ai_tools._tavily_search
+    ai_tools._tavily_search = lambda query: {"results": fake_results}
+    try:
+        got = call_tool(ai_tools.search_web, ctx_for(1), query="随便搜点什么")
+    finally:
+        ai_tools._tavily_search = original_search
+
+    expect(
+        len(got["results"]) == MAX_EXPECTED_RESULTS,
+        f"条数应封顶 {MAX_EXPECTED_RESULTS} 条，实际 {len(got['results'])}",
+    )
+    first = got["results"][0]
+    expect(
+        set(first) == {"title", "url", "snippet"},
+        f"每条字段应固定为 title / url / snippet，实际 {sorted(first)}",
+    )
+    expect(
+        len(first["snippet"]) == MAX_EXPECTED_SNIPPET,
+        f"snippet 应截到 {MAX_EXPECTED_SNIPPET} 字符，实际 {len(first['snippet'])}",
+    )
+
+    ai_tools._tavily_search = lambda query: {"results": []}
+    try:
+        empty = call_tool(ai_tools.search_web, ctx_for(1), query="搜不到的词")
+    finally:
+        ai_tools._tavily_search = original_search
+    expect(empty["results"] == [], f"搜不到时应是空列表而不是抛异常：{empty}")
+
+    def boom(query: str) -> dict:
+        raise RuntimeError("connection reset")
+
+    ai_tools._tavily_search = boom
+    try:
+        failed = call_tool(ai_tools.search_web, ctx_for(1), query="随便")
+    finally:
+        ai_tools._tavily_search = original_search
+    expect("error" in failed, f"打网络失败应返回 error dict（模型能转述），实际 {failed}")
+
+
 CHECKS = [
     ("用例 1：A 查自己的项目，数字与上报一致", check_own_project_data),
     ("★ 用例 2：A 传 B 的项目名 —— 不泄露存在性", check_foreign_project_name),
@@ -486,12 +607,14 @@ CHECKS = [
     ("补充：按小时跨多天返回 error dict", check_hour_granularity_span),
     ("用例 8：空数据项目返回 0 / 空列表", check_empty_project),
     ("用例 9：日志条数上限被 clamp", check_limit_clamp),
+    ("用例 10：list_models 只列内置 + 自己的自建", check_list_models),
+    ("用例 11：search_web 注册条件与返回结构", check_search_web),
 ]
 
 
 def main() -> int:
     print("=" * 62)
-    print("AI Monitor — AI 工具层验收（批次 1）")
+    print("AI Monitor — AI 工具层验收（批次 1 + 批次 4 扩展）")
     print("=" * 62)
     print(f"测试库：{mask_password(TEST_DATABASE_URL)}")
     print()
@@ -539,7 +662,7 @@ def main() -> int:
         return 1
 
     print(f"全部通过 ✅ {len(CHECKS)}/{len(CHECKS)}")
-    print("批次 1 工具层完成 —— 八个工具可用，用户隔离与边界处理已验证")
+    print("工具层完成 —— 数据工具与联网搜索均可用，用户隔离与边界处理已验证")
     return 0
 
 

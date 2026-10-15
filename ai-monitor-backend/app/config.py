@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # 一次坏请求能长时间占着连接烧 Token
     assistant_max_tool_rounds: int = 10
 
+    # 留空 = 未配置：search_web 工具不进清单，模型看不到它，问价格时如实说明
+    # 没有联网能力。与 llm_api_key 同策略，缺配置降级、不阻止启动
+    tavily_api_key: str = ""
+
     # .env 按「启动目录」找，不是按本文件位置 —— 约定从 ai-monitor-backend/ 启动服务
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

@@ -1,15 +1,18 @@
-"""AI 分析助手的查询工具：项目名解析与鉴权、自然日换算，以及八个只读查询。"""
+"""AI 分析助手的工具：项目名解析与鉴权、自然日换算、九个只读查询与联网搜索。"""
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, TypeVar
 from zoneinfo import ZoneInfo
 
 from langchain.tools import ToolRuntime, tool
+from langchain_core.tools import BaseTool
+from langchain_tavily import TavilySearch
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.context import AssistantContext
+from app.config import settings
 from app.database import SessionLocal
 from app.models import LLMRequest, Project, User
 from app.schemas.anomaly import AnomalyQuery
@@ -17,12 +20,17 @@ from app.schemas.log import LogListQuery
 from app.schemas.stats import StatsQuery
 from app.services import anomaly as anomaly_service
 from app.services import logs as logs_service
+from app.services import model as model_service
 from app.services import project as project_service
 from app.services import stats as stats_service
 
 # 不封顶的话，一句「把最近的调用都列出来」就能把几十 KB 的日志摘要塞进模型上下文
 MAX_LOG_LIMIT = 20
 MAX_ERROR_MESSAGE_CHARS = 200
+MAX_SEARCH_RESULTS = 5
+# 实测 Tavily 的正文多在 400~1400 字符，且价格表常常在后半段 —— 截得太狠等于把答案切掉。
+# 1000 是个「几乎不误伤、又能拦住超长页面」的位置
+MAX_SNIPPET_CHARS = 1000
 
 QueryT = TypeVar("QueryT")
 
@@ -515,13 +523,100 @@ def analyze_anomalies(
         return result
 
 
-ALL_TOOLS = [
-    list_projects,
-    get_project_overview,
-    get_token_usage,
-    get_cost_statistics,
-    get_model_usage,
-    get_recent_logs,
-    get_error_logs,
-    analyze_anomalies,
-]
+@tool
+def list_models(runtime: ToolRuntime[AssistantContext]) -> dict:
+    """列出平台里已配置的模型及其价格（元 / 百万 Token）：模型名、提供方、
+    输入价、输出价、缓存命中价、来源（内置 / 自建）、在用的项目。
+
+    用户问「有哪些模型」「某个模型在库里是什么价」时调用。它给的是平台上
+    已配置的价格，不是厂商官网的最新定价 —— 用户问「官方定价 / 最新价格」
+    时改用 search_web 联网查。
+    """
+    ctx = runtime.context
+    with SessionLocal() as db:
+        user = db.get(User, ctx.user_id)
+        if user is None:
+            return {"error": "当前用户不存在。"}
+        rows = model_service.list_models(db, user)
+        return {
+            "models": [
+                {
+                    "model_name": model.model_name,
+                    "provider": model.provider,
+                    "input_price_cny_per_million": float(model.input_price),
+                    "output_price_cny_per_million": float(model.output_price),
+                    # None = 没配缓存档，与「缓存价是 0（真的免费）」是两回事
+                    "cache_hit_price_cny_per_million": (
+                        float(model.cache_hit_price)
+                        if model.cache_hit_price is not None
+                        else None
+                    ),
+                    "source": "内置" if model.is_builtin else "自建",
+                    "used_by_projects": projects,
+                }
+                for model, projects in rows
+            ]
+        }
+
+
+def _tavily_search(query: str) -> dict:
+    # 真正打网络的一层单独拆出来：验收脚本把它整个换掉，就能离线测返回结构
+    searcher = TavilySearch(
+        max_results=MAX_SEARCH_RESULTS,
+        tavily_api_key=settings.tavily_api_key,
+    )
+    return searcher.invoke({"query": query})
+
+
+@tool
+def search_web(query: str) -> dict:
+    """联网搜索公开网页，返回最多 5 条结果的标题、链接和摘要。
+
+    Args:
+        query: 搜索关键词。「deepseek-chat 官方定价」这种具体词组比一整句
+            问句更容易搜到有用结果。
+    """
+    try:
+        raw = _tavily_search(query)
+    except Exception as exc:  # noqa: BLE001
+        # 断网、限流、Key 失效都会从这里抛出来。返回错误让模型如实转述，
+        # 而不是把异常抛上去中断整轮对话
+        return {"error": f"联网搜索失败：{exc}"}
+
+    items = raw.get("results") or []
+    return {
+        "results": [
+            {
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": (item.get("content") or "").strip()[:MAX_SNIPPET_CHARS],
+            }
+            for item in items[:MAX_SEARCH_RESULTS]
+        ]
+    }
+
+
+def build_tools() -> list[BaseTool]:
+    """组装工具清单。search_web 要用 Tavily Key，没配就不注册 —— 模型看不到它，
+    问价格时只能如实回答没有联网能力。
+
+    写成函数而不是直接把列表定死：验收要在同一个进程里切换 Key 的有无，
+    只看模块级的 ALL_TOOLS 切不动。生产仍然用下面这一份。
+    """
+    tools = [
+        list_projects,
+        get_project_overview,
+        get_token_usage,
+        get_cost_statistics,
+        get_model_usage,
+        get_recent_logs,
+        get_error_logs,
+        analyze_anomalies,
+        list_models,
+    ]
+    if settings.tavily_api_key:
+        tools.append(search_web)
+    return tools
+
+
+ALL_TOOLS = build_tools()
