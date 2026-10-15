@@ -57,7 +57,7 @@ class ProjectListItem(BaseModel):
     # 前端靠它区分「还没接入」和「上报正常」—— 不能编造，也不能拿项目创建时间冒充
     last_called_at: datetime | None = None
 
-    # 异常判定要到阶段 9 才有数据源，在那之前恒为 false
+    # 口径是「最近 7 天有没有四类异常」，与异常页的默认区间一致
     has_anomaly: bool = False
 
 

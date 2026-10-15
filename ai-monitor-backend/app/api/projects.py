@@ -37,8 +37,9 @@ def list_projects(
                 tech_stack=project.tech_stack,
                 status=project.status,
                 last_called_at=last_called_at,
+                has_anomaly=has_anomaly,
             )
-            for project, last_called_at in rows
+            for project, last_called_at, has_anomaly in rows
         ],
         total=len(rows),
     )

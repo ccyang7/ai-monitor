@@ -1,6 +1,6 @@
 """项目的查询、创建、删除，以及配额与重名校验。"""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -9,10 +9,13 @@ from app.config import settings
 from app.exceptions import BusinessError
 from app.models import LLMRequest, Project, User
 from app.schemas.project import ProjectCreateIn, ProjectUpdateIn
+from app.services import anomaly as anomaly_service
 from app.services import api_key as api_key_service
 
 
-def list_projects(db: Session, user: User) -> list[tuple[Project, datetime | None]]:
+def list_projects(
+    db: Session, user: User
+) -> list[tuple[Project, datetime | None, bool]]:
     # owner_id 过滤绝不能省 —— 漏掉就是列出全系统所有项目
     projects = list(
         db.scalars(
@@ -33,7 +36,27 @@ def list_projects(db: Session, user: User) -> list[tuple[Project, datetime | Non
             .group_by(LLMRequest.project_id)
         ).all()
     )
-    return [(p, last_called_map.get(p.id)) for p in projects]
+    now = datetime.now(timezone.utc)
+    return [
+        (
+            p,
+            last_called_map.get(p.id),
+            _has_recent_anomaly(
+                db, p.id, now - anomaly_service.BASELINE_WINDOW, now
+            ),
+        )
+        for p in projects
+    ]
+
+
+def _has_recent_anomaly(
+    db: Session, project_id: int, start: datetime, end: datetime
+) -> bool:
+    # 复用异常页的完整判定，不另写「只查有没有」的轻量版：两套判定迟早会在阈值和
+    # 基线口径上分叉，首页红点与异常页对不上。逐项目约 5 条 SQL、首页最多 3 个项目，划算。
+    # tz 固定 UTC —— 错误率按天分组，时区只影响跨天边界少数几条的归属，不改变「有没有」
+    counts, _ = anomaly_service.count_anomalies(db, project_id, start, end, "UTC")
+    return counts.token + counts.latency + counts.error + counts.error_rate > 0
 
 
 def create_project(

@@ -684,6 +684,46 @@ def check_timezone_window() -> None:
     )
 
 
+def project_has_anomaly(token: str, project_id: int) -> bool:
+    r = client.get("/api/v1/projects", headers=auth(token))
+    expect(r.status_code == 200, f"项目列表应返回 200，实际 {r.status_code}：{r.text}")
+    items = {item["id"]: item for item in r.json()["items"]}
+    expect(project_id in items, f"项目列表里应能看到项目 {project_id}：{items}")
+    return items[project_id]["has_anomaly"]
+
+
+def check_project_list_has_anomaly() -> None:
+    """首页卡片的红点：只认最近 7 天，窗口外的旧异常不标，别家项目不被连带。"""
+    token = register_and_login("alice")
+    pid, key = make_project(token, "首页红点")
+    other_id, other_key = make_project(token, "对照组")
+
+    seed_baseline(key)
+    seed_baseline(other_key)
+    expect(
+        project_has_anomaly(token, pid) is False,
+        "只有正常调用、没有异常的项目不该标红",
+    )
+
+    # 12 天前的失败调用落在判定窗口外。首页红点只看最近 7 天，
+    # 否则一条陈年旧账会让卡片一直红着
+    seed_logs(key, [_call(BASE_TOKENS, BASE_LATENCY, NOW - timedelta(days=12), "error")])
+    expect(
+        project_has_anomaly(token, pid) is False,
+        "判定窗口（最近 7 天）之外的旧异常不该标红",
+    )
+
+    seed_logs(key, [_call(BASE_TOKENS, BASE_LATENCY, BASELINE_AT, "error")])
+    expect(
+        project_has_anomaly(token, pid) is True,
+        "窗口内的失败调用应该让项目列表标红",
+    )
+    expect(
+        project_has_anomaly(token, other_id) is False,
+        "另一个项目不该被连带标红",
+    )
+
+
 def check_empty_project() -> None:
     """空项目：0 条 + 基线不可用，且不能报错。"""
     token = register_and_login("alice")
@@ -976,6 +1016,7 @@ CHECKS = [
     ("类型筛选：只留指定的一类", check_type_filter),
     ("分页：翻页不重不漏，越界返回空页", check_pagination),
     ("概览的 anomaly_counts 逐类与异常列表对得上", check_overview_count_matches),
+    ("首页红点：只认最近 7 天，窗口外旧异常与别家项目不标红", check_project_list_has_anomaly),
     ("窗口时区：同一批记录在 UTC 与 +08:00 落到不同的天", check_timezone_window),
     ("空项目：0 条 + 基线不可用", check_empty_project),
     ("异常标准：没设过时三项都报默认值", check_settings_defaults),
