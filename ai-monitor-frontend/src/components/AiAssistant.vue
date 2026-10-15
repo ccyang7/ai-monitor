@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import MarkdownIt from 'markdown-it'
 import { streamChat } from '@/api/chat'
+import { useAssistantStore } from '@/stores/assistant'
 import { useProjectsStore } from '@/stores/projects'
 import type { ChatEvent, ChatMessage } from '@/types/chat'
 
@@ -20,6 +21,7 @@ md.renderer.rules.link_open = (tokens, idx, options, _env, self) => {
 }
 
 const route = useRoute()
+const assistant = useAssistantStore()
 const projects = useProjectsStore()
 
 const open = ref(false)
@@ -167,6 +169,21 @@ function onEnter(event: KeyboardEvent): void {
   event.preventDefault()
   void send()
 }
+
+// 页面上别处的入口（「问 AI 价格」）放一条待发问题进来：打开面板、填进输入框、
+// 直接发出去。抽屉自己不发消息时用户也可以只当它是预填
+watch(
+  () => assistant.pending,
+  (question) => {
+    if (!question) return
+    const text = assistant.consume()
+    if (!text) return
+    open.value = true
+    input.value = text
+    // 正在生成回答时不抢占：问题留在输入框里，等这轮结束用户自己按回车
+    if (!sending.value) void send()
+  },
+)
 </script>
 
 <template>
@@ -247,11 +264,14 @@ function onEnter(event: KeyboardEvent): void {
 </template>
 
 <style scoped>
+/* 90/91 是助手自己的两档（浮球在下、面板在上），但页面弹窗用的是 naive-ui 的
+   2000 档 —— 「问 AI 价格」就是从模型表单弹窗里点的，压在它下面等于点了没反应。
+   抬到 3000：高过弹窗与抽屉，仍低于 message / notification，不至于挡住提示条 */
 .ai-fab {
   position: fixed;
   right: 26px;
   bottom: 26px;
-  z-index: 90;
+  z-index: 2999;
   width: 52px;
   height: 52px;
   display: grid;
@@ -279,7 +299,7 @@ function onEnter(event: KeyboardEvent): void {
   position: fixed;
   right: 26px;
   bottom: 26px;
-  z-index: 91;
+  z-index: 3000;
   display: flex;
   flex-direction: column;
   width: 400px;
