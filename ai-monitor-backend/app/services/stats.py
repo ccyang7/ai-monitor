@@ -96,6 +96,9 @@ def _summarize(db: Session, project_id: int, start: datetime, end: datetime):
         select(
             func.count().label("calls"),
             func.coalesce(func.sum(LLMRequest.input_tokens), 0).label("input_tokens"),
+            func.coalesce(func.sum(LLMRequest.cache_hit_tokens), 0).label(
+                "cache_hit_tokens"
+            ),
             func.coalesce(func.sum(LLMRequest.output_tokens), 0).label("output_tokens"),
             func.coalesce(func.sum(LLMRequest.total_tokens), 0).label("total_tokens"),
             # SUM 跳过 NULL，所以未知模型（成本为 NULL）的调用不会污染成本合计，
@@ -165,12 +168,14 @@ def get_overview(
         summary=PeriodMetrics(
             calls=current.calls,
             total_tokens=current.total_tokens,
+            cache_hit_tokens=current.cache_hit_tokens,
             cost=float(current.cost),
             avg_latency=_avg_latency(current.avg_latency),
         ),
         previous=PeriodMetrics(
             calls=previous.calls,
             total_tokens=previous.total_tokens,
+            cache_hit_tokens=previous.cache_hit_tokens,
             cost=float(previous.cost),
             avg_latency=_avg_latency(previous.avg_latency),
         ),
@@ -204,6 +209,7 @@ def get_token_stats(db: Session, project: Project, query: StatsQuery) -> TokensO
         summary=TokenSummary(
             calls=summary.calls,
             input_tokens=summary.input_tokens,
+            cache_hit_tokens=summary.cache_hit_tokens,
             output_tokens=summary.output_tokens,
             total_tokens=summary.total_tokens,
         ),
@@ -242,6 +248,9 @@ def get_model_stats(db: Session, project: Project, query: StatsQuery) -> ModelsO
             LLMRequest.model,
             func.count().label("calls"),
             func.coalesce(func.sum(LLMRequest.total_tokens), 0).label("total_tokens"),
+            func.coalesce(func.sum(LLMRequest.cache_hit_tokens), 0).label(
+                "cache_hit_tokens"
+            ),
             func.coalesce(func.sum(LLMRequest.estimated_cost), 0).label("cost"),
             func.avg(LLMRequest.latency)
             .filter(LLMRequest.status == "success")
@@ -261,6 +270,7 @@ def get_model_stats(db: Session, project: Project, query: StatsQuery) -> ModelsO
             model=row.model,
             calls=row.calls,
             total_tokens=row.total_tokens,
+            cache_hit_tokens=row.cache_hit_tokens,
             cost=float(row.cost),
             avg_latency=_avg_latency(row.avg_latency),
             # 各自四舍五入到 1 位，几项加起来可能是 99.9 或 100.1，这是显示口径

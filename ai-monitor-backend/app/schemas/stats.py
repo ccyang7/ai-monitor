@@ -35,6 +35,9 @@ class PeriodMetrics(BaseModel):
 
     calls: int
     total_tokens: int
+    # 输入中命中缓存的部分（子集）。这里不展示 input_tokens 却单独带它，
+    # 是为了能解释成本涨跌：「这周成本降了」的常见原因就是命中率涨了
+    cache_hit_tokens: int
     cost: float
 
     # 区间内一次成功调用都没有时是 null 而不是 0：「没有可统计的响应时间」
@@ -58,6 +61,9 @@ class OverviewOut(BaseModel):
 class TokenSummary(BaseModel):
     calls: int
     input_tokens: int
+    # 命中数是 input 的子集，未命中 = input_tokens - cache_hit_tokens。
+    # 成本已按命中价算好，不要把它和 input_tokens 相加
+    cache_hit_tokens: int
     output_tokens: int
     total_tokens: int
 
@@ -97,6 +103,8 @@ class ModelUsageItem(BaseModel):
     model: str
     calls: int
     total_tokens: int
+    # 该模型输入中命中缓存的部分（子集，语义同 TokenSummary）
+    cache_hit_tokens: int
     cost: float
     avg_latency: int | None
     # 三个口径的占比都由服务端算，一套口径一个字段。前端自己算的话，

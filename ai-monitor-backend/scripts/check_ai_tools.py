@@ -67,7 +67,9 @@ BUILTIN_MODELS = [
     ("openai", "gpt-4o", "10", "30"),
 ]
 
-# 每次成功调用的固定成本：100 输入 * 1 元/百万 + 200 输出 * 2 元/百万
+# 每次成功调用的固定成本：100 输入 * 1 元/百万 + 200 输出 * 2 元/百万。
+# 测试内置模型没配 cache_hit_price（NULL），命中的 40 个 token 退回按输入价算 ——
+# 成本与改动前逐分钱一致，所以这个常量不跟着变（两档价公式由 check_ingest.py 专门验证）
 CHAT_COST = 0.0005
 
 # 联网搜索的上限写死在验收里（不引 ai/tools.py 的常量）：哪天有人把上限改成 8 条，
@@ -160,6 +162,7 @@ def ingest(key: str, **overrides):
         "input": "什么是 Redis？",
         "output": "Redis 是一种开源的键值数据库……",
         "input_tokens": 100,
+        "cache_hit_tokens": 40,
         "output_tokens": 200,
         "latency": 1000,
         "status": "success",
@@ -232,6 +235,10 @@ def check_own_project_data() -> None:
         data["input_tokens"] == 200 and data["output_tokens"] == 400,
         f"输入输出拆分不对：{data}",
     )
+    expect(
+        data["cache_hit_tokens"] == 80,
+        f"两次调用各命中 40，应汇总为 80，实际 {data['cache_hit_tokens']}",
+    )
 
     cost = call_tool(
         ai_tools.get_cost_statistics, ctx, start_date=DAY_STR, end_date=DAY_STR
@@ -247,8 +254,22 @@ def check_own_project_data() -> None:
         f"概览汇总应与上报数据一致，实际 {body}",
     )
     expect(
+        body["cache_hit_tokens"] == 80 and body["previous"]["cache_hit_tokens"] == 0,
+        f"概览应带命中数、环比区间没数据应为 0，实际 {body['cache_hit_tokens']} / "
+        f"{body['previous']['cache_hit_tokens']}",
+    )
+    expect(
         set(body["anomaly_counts"]) == {"token", "latency", "error", "error_rate"},
         f"概览应带四类异常条数，实际 {body['anomaly_counts']}",
+    )
+
+    models = call_tool(
+        ai_tools.get_model_usage, ctx, start_date=DAY_STR, end_date=DAY_STR
+    )
+    item = models["问答助手"]["models"][0]
+    expect(
+        item["model"] == "deepseek-chat" and item["cache_hit_tokens"] == 80,
+        f"模型分布应带命中数，实际 {item}",
     )
 
 
@@ -474,6 +495,14 @@ def check_limit_clamp() -> None:
         [
             {"timestamp": (DAY + timedelta(minutes=i)).isoformat()}
             for i in range(25)
+        ]
+        # 再补一条最新的失败调用：验证 get_error_logs 的字段形状需要至少一条正例
+        + [
+            {
+                "timestamp": (DAY + timedelta(hours=1)).isoformat(),
+                "status": "error",
+                "error": "APITimeoutError: Request timed out",
+            }
         ],
     )
     ctx = ctx_for(uid)
@@ -493,8 +522,40 @@ def check_limit_clamp() -> None:
     # 日志摘要里绝不能带请求 / 响应正文：几十 KB 的大文本会把模型上下文撑爆
     first = default["日志很多"]["items"][0]
     expect(
-        set(first) == {"time", "model", "total_tokens", "latency_ms", "status"},
+        set(first)
+        == {
+            "time",
+            "model",
+            "total_tokens",
+            "cache_hit_tokens",
+            "latency_ms",
+            "status",
+        },
         f"日志摘要字段变了：{sorted(first)}",
+    )
+    expect(
+        first["cache_hit_tokens"] == 40,
+        f"日志摘要应带命中数（默认载荷每条命中 40），实际 {first['cache_hit_tokens']}",
+    )
+
+    errs = call_tool(ai_tools.get_error_logs, ctx, project_names=["日志很多"])
+    err_first = errs["日志很多"]["items"][0]
+    expect(
+        set(err_first)
+        == {
+            "time",
+            "model",
+            "total_tokens",
+            "cache_hit_tokens",
+            "latency_ms",
+            "status",
+            "error_message",
+        },
+        f"失败日志字段变了：{sorted(err_first)}",
+    )
+    expect(
+        err_first["cache_hit_tokens"] == 40 and err_first["status"] == "error",
+        f"失败日志应带命中数且只取失败调用，实际 {err_first}",
     )
 
 

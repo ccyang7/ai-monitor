@@ -150,6 +150,7 @@ def get_project_overview(
 ) -> dict:
     """查询项目概览：调用次数、Token 总量、估算成本（元）、平均响应时间（毫秒），
     并给出上一个等长区间的同组指标（用于算环比）和各类异常的条数。
+    每个区间都带 cache_hit_tokens：输入 token 中命中缓存的部分（子集）。
 
     Args:
         start_date: 开始日期，自然日、含当天，格式 YYYY-MM-DD。
@@ -183,11 +184,13 @@ def get_project_overview(
             result[project.name] = {
                 "calls": overview.summary.calls,
                 "total_tokens": overview.summary.total_tokens,
+                "cache_hit_tokens": overview.summary.cache_hit_tokens,
                 "estimated_cost_cny": overview.summary.cost,
                 "avg_latency_ms": overview.summary.avg_latency,
                 "previous": {
                     "calls": overview.previous.calls,
                     "total_tokens": overview.previous.total_tokens,
+                    "cache_hit_tokens": overview.previous.cache_hit_tokens,
                     "estimated_cost_cny": overview.previous.cost,
                     "avg_latency_ms": overview.previous.avg_latency,
                 },
@@ -206,6 +209,8 @@ def get_token_usage(
     granularity: Literal["day", "hour"] = "day",
 ) -> dict:
     """查询 Token 使用情况：汇总 + 趋势序列（按天或按小时）。
+    summary.cache_hit_tokens 是 input_tokens 中命中缓存的部分（子集），
+    不要把它和 input_tokens 相加。
 
     Args:
         start_date: 开始日期，自然日、含当天，格式 YYYY-MM-DD。
@@ -240,6 +245,7 @@ def get_token_usage(
             result[project.name] = {
                 "calls": stats.summary.calls,
                 "input_tokens": stats.summary.input_tokens,
+                "cache_hit_tokens": stats.summary.cache_hit_tokens,
                 "output_tokens": stats.summary.output_tokens,
                 "total_tokens": stats.summary.total_tokens,
                 "series": [
@@ -317,6 +323,7 @@ def get_model_usage(
     project_names: list[str] | None = None,
 ) -> dict:
     """查询各模型的使用分布：调用次数、Token、成本及其占比。
+    每项含 cache_hit_tokens（该模型输入中命中缓存的部分，子集）。
 
     Args:
         start_date: 开始日期，自然日、含当天，格式 YYYY-MM-DD。
@@ -347,6 +354,7 @@ def get_model_usage(
                         "model": item.model,
                         "calls": item.calls,
                         "total_tokens": item.total_tokens,
+                        "cache_hit_tokens": item.cache_hit_tokens,
                         "estimated_cost_cny": item.cost,
                         "avg_latency_ms": item.avg_latency,
                         "call_percentage": item.call_percentage,
@@ -366,6 +374,7 @@ def get_recent_logs(
     limit: int = 10,
 ) -> dict:
     """查询最近的调用日志摘要，不含请求与响应正文。
+    每条含 cache_hit_tokens（输入中命中缓存的部分，子集）。
 
     Args:
         project_names: 项目名称列表。不传 = 当前用户的全部项目；
@@ -390,6 +399,7 @@ def get_recent_logs(
                         "time": _local(row.created_at, ctx.timezone),
                         "model": row.model,
                         "total_tokens": row.total_tokens,
+                        "cache_hit_tokens": row.cache_hit_tokens,
                         "latency_ms": row.latency,
                         "status": row.status,
                     }
@@ -406,6 +416,7 @@ def get_error_logs(
     limit: int = 10,
 ) -> dict:
     """查询最近的失败调用（status=error）及其错误信息摘要。
+    每条含 cache_hit_tokens（输入中命中缓存的部分，子集）。
 
     Args:
         project_names: 项目名称列表。不传 = 当前用户的全部项目；
@@ -442,6 +453,7 @@ def get_error_logs(
                         "time": _local(row.created_at, ctx.timezone),
                         "model": row.model,
                         "total_tokens": row.total_tokens,
+                        "cache_hit_tokens": row.cache_hit_tokens,
                         "latency_ms": row.latency,
                         "status": row.status,
                         "error_message": (messages.get(row.id) or "")[

@@ -16,6 +16,8 @@ export interface StatsParams {
 export interface PeriodMetrics {
   calls: number
   total_tokens: number
+  // 输入中命中缓存的部分（子集），用来解释成本涨跌
+  cache_hit_tokens: number
   cost: number
   // 区间内一次成功调用都没有时是 null，不是 0 —— 后者会被读成「响应时间 0 毫秒」
   avg_latency: number | null
@@ -36,6 +38,8 @@ export interface OverviewOut {
 export interface TokenSummary {
   calls: number
   input_tokens: number
+  // 命中数是 input 的子集，未命中 = input_tokens - cache_hit_tokens
+  cache_hit_tokens: number
   output_tokens: number
   total_tokens: number
 }
@@ -73,6 +77,7 @@ export interface ModelUsageItem {
   model: string
   calls: number
   total_tokens: number
+  cache_hit_tokens: number
   cost: number
   avg_latency: number | null
   // 三个口径的占比都由服务端算好，各自四舍五入到 1 位，加起来可能是 99.9 或 100.1。

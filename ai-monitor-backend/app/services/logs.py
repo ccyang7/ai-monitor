@@ -13,6 +13,7 @@ _LIST_COLUMNS = (
     LLMRequest.id,
     LLMRequest.model,
     LLMRequest.input_tokens,
+    LLMRequest.cache_hit_tokens,
     LLMRequest.output_tokens,
     LLMRequest.total_tokens,
     LLMRequest.latency,

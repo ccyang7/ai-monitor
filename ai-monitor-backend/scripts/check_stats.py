@@ -59,9 +59,11 @@ BUILTIN_MODELS = [
 
 BASE = datetime(2026, 9, 1, 0, 0, tzinfo=timezone.utc)
 
-# 每次成功调用的固定成本：100 输入 * 1 元/百万 + 200 输出 * 2 元/百万
+# 每次成功调用的固定成本：100 输入 * 1 元/百万 + 200 输出 * 2 元/百万。
+# 测试内置模型没配 cache_hit_price（NULL），命中的 40 个 token 退回按输入价算 ——
+# 成本与改动前逐分钱一致，所以这个常量不跟着变
 CHAT_COST = 0.0005
-OV_FIELDS = {"calls", "total_tokens", "cost", "avg_latency"}
+OV_FIELDS = {"calls", "total_tokens", "cache_hit_tokens", "cost", "avg_latency"}
 
 STATS_KINDS = ("overview", "tokens", "costs", "models")
 
@@ -133,6 +135,7 @@ def ingest(key: str, **overrides):
         "input": "什么是 Redis？",
         "output": "Redis 是一种开源的键值数据库……",
         "input_tokens": 100,
+        "cache_hit_tokens": 40,
         "output_tokens": 200,
         "latency": 1000,
         "status": "success",
@@ -217,6 +220,10 @@ def check_overview_summary() -> None:
     expect(set(s.keys()) == OV_FIELDS, f"summary 字段变了：{sorted(s.keys())}")
     expect(s["calls"] == 4, f"当前区间应有 4 次调用，实际 {s['calls']}")
     expect(s["total_tokens"] == 1200, f"Token 应为 1200，实际 {s['total_tokens']}")
+    expect(
+        s["cache_hit_tokens"] == 160,
+        f"当前区间 4 次调用各命中 40，应为 160，实际 {s['cache_hit_tokens']}",
+    )
     # 失败那条一样有 Token 消耗、一样有成本：statistics 不按 status 打折，
     # 只有「平均响应时间」才排除失败调用
     expect_close(s["cost"], 4 * CHAT_COST, "当前区间成本")
@@ -231,6 +238,10 @@ def check_overview_summary() -> None:
     expect(set(p.keys()) == OV_FIELDS, f"previous 字段变了：{sorted(p.keys())}")
     expect(p["calls"] == 2, f"环比区间应有 2 次调用，实际 {p['calls']}")
     expect(p["total_tokens"] == 600, f"环比 Token 应为 600，实际 {p['total_tokens']}")
+    expect(
+        p["cache_hit_tokens"] == 80,
+        f"环比区间 2 次调用各命中 40，应为 80，实际 {p['cache_hit_tokens']}",
+    )
     expect_close(p["cost"], 2 * CHAT_COST, "环比区间成本")
     expect(p["avg_latency"] == 1000, f"环比平均响应应为 1000，实际 {p['avg_latency']}")
 
@@ -300,12 +311,20 @@ def check_token_series_gapfill() -> None:
 
     s = body["summary"]
     expect(
-        set(s.keys()) == {"calls", "input_tokens", "output_tokens", "total_tokens"},
+        set(s.keys())
+        == {
+            "calls",
+            "input_tokens",
+            "cache_hit_tokens",
+            "output_tokens",
+            "total_tokens",
+        },
         f"tokens summary 字段变了：{sorted(s.keys())}",
     )
     expect(s["calls"] == 3, f"应有 3 次调用，实际 {s['calls']}")
     expect(s["input_tokens"] == 100 + 100 + 300, f"输入 Token 不对：{s['input_tokens']}")
     expect(s["output_tokens"] == 200 + 200 + 500, f"输出 Token 不对：{s['output_tokens']}")
+    expect(s["cache_hit_tokens"] == 120, f"命中 Token 不对：{s['cache_hit_tokens']}")
     expect(
         s["input_tokens"] + s["output_tokens"] == s["total_tokens"],
         "输入 + 输出应等于总量",
@@ -403,6 +422,10 @@ def check_model_breakdown() -> None:
 
     expect(by_model["deepseek-chat"]["calls"] == 2, "deepseek-chat 应有 2 次")
     expect(by_model["deepseek-chat"]["total_tokens"] == 600, "deepseek-chat Token 不对")
+    expect(
+        by_model["deepseek-chat"]["cache_hit_tokens"] == 80,
+        f"deepseek-chat 命中数不对：{by_model['deepseek-chat']['cache_hit_tokens']}",
+    )
     expect_close(by_model["deepseek-chat"]["cost"], 2 * CHAT_COST, "deepseek-chat 成本")
     expect(by_model["deepseek-chat"]["call_percentage"] == 50.0, "按调用次数的占比应为 50%")
 
