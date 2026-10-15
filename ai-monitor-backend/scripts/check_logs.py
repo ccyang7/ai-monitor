@@ -65,6 +65,8 @@ LIST_FIELDS = {
     "id",
     "model",
     "input_tokens",
+    # 批次 3 加的：输入 Token 里命中缓存的部分，详情抽屉靠它显示「命中/未命中」
+    "cache_hit_tokens",
     "output_tokens",
     "total_tokens",
     "latency",

@@ -34,6 +34,10 @@ class LLMRequest(Base):
             "input_tokens >= 0 AND output_tokens >= 0 AND total_tokens >= 0",
             name="ck_llm_requests_tokens",
         ),
+        CheckConstraint(
+            "cache_hit_tokens >= 0 AND cache_hit_tokens <= input_tokens",
+            name="ck_llm_requests_cache_hit",
+        ),
         CheckConstraint("latency >= 0", name="ck_llm_requests_latency"),
     )
 
@@ -55,6 +59,8 @@ class LLMRequest(Base):
     output: Mapped[str | None] = mapped_column(Text)
 
     input_tokens: Mapped[int] = mapped_column(Integer, server_default="0")
+    # input_tokens 中命中缓存的部分（子集）；未命中数用减法算，不单独存
+    cache_hit_tokens: Mapped[int] = mapped_column(Integer, server_default="0")
     output_tokens: Mapped[int] = mapped_column(Integer, server_default="0")
     total_tokens: Mapped[int] = mapped_column(Integer, server_default="0")
 

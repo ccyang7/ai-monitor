@@ -27,6 +27,9 @@ class LogIngestIn(BaseModel):
     output: str | None = None
 
     input_tokens: int = Field(default=0, ge=0)
+    # 命中缓存的输入 token 数（input_tokens 的子集）。默认 0 = 老接入方不传，
+    # 全部输入按未命中价算，成本与改动前逐分钱一致
+    cache_hit_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
 
     # 不传时由服务端用 input + output 补齐。让它是 None 而不是默认 0 ——
@@ -42,6 +45,14 @@ class LogIngestIn(BaseModel):
     @classmethod
     def _normalize_timestamp(cls, value: datetime | None) -> datetime | None:
         return _assume_utc(value)
+
+    @model_validator(mode="after")
+    def _check_cache_hit_within_input(self) -> "LogIngestIn":
+        # 命中数是输入的子集。两个数对不上时，与其挑一个信、或都存下来以后再吵，
+        # 不如入口就拒掉 —— 少一种坏数据
+        if self.cache_hit_tokens > self.input_tokens:
+            raise ValueError("cache_hit_tokens 不能大于 input_tokens")
+        return self
 
 
 class LogCreatedOut(BaseModel):
@@ -100,6 +111,7 @@ class LogListItem(BaseModel):
     id: int
     model: str
     input_tokens: int
+    cache_hit_tokens: int
     output_tokens: int
     total_tokens: int
     latency: int

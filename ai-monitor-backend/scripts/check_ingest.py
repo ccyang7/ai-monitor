@@ -309,6 +309,97 @@ def pid_owner(db, project_id: int) -> int:
     ).scalar()
 
 
+def check_cache_pricing() -> None:
+    token = register_and_login("karl")
+    created = new_project(token, "缓存计价")
+    pid, key = created["id"], created["api_key"]
+
+    # 临时造一个配了缓存价的内置模型 —— 夹具（BUILTIN_MODELS）保持原样：
+    # 旧用例跑的还是「模型没有缓存价」的库状态，兼容性证明不受影响
+    with TestSession() as db:
+        db.add(
+            Model(
+                provider="deepseek",
+                model_name="cache-priced-model",
+                input_price=Decimal("1"),
+                output_price=Decimal("2"),
+                cache_hit_price=Decimal("0.5"),
+                is_builtin=True,
+            )
+        )
+        db.commit()
+
+    # ① 两档价：0.6M 命中 × 0.5 + 0.4M 未命中 × 1 + 0.5M 输出 × 2 = 1.7 元。
+    #    若命中部分也按 1 元算会得到 2.0 —— 差的就是缓存省下的钱
+    r = ingest(
+        key,
+        model="cache-priced-model",
+        input_tokens=1_000_000,
+        cache_hit_tokens=600_000,
+        output_tokens=500_000,
+    )
+    expect(
+        read_log(r.json()["id"])["estimated_cost"] == Decimal("1.70000000"),
+        "命中部分必须按 cache_hit_price 算（两档公式应得 1.7，全按输入价会是 2.0）",
+    )
+    hit_log_id = r.json()["id"]
+
+    # ② 降级 A：模型没配缓存价（gpt-4o），报了命中数也全按 input_price —— 等价单档
+    r = ingest(
+        key,
+        provider="openai",
+        model="gpt-4o",
+        input_tokens=1_000_000,
+        cache_hit_tokens=600_000,
+        output_tokens=0,
+    )
+    expect(
+        read_log(r.json()["id"])["estimated_cost"] == Decimal("10.00000000"),
+        "没配缓存价时命中部分退回按 input_price 算（1M × 10 = 10 元）",
+    )
+
+    # ③ 降级 B：老接入方不传 / 显式传 0，两条路径的成本必须逐分钱一致
+    r_zero = ingest(
+        key, input_tokens=1_000_000, output_tokens=500_000, cache_hit_tokens=0
+    )
+    r_absent = ingest(key, input_tokens=1_000_000, output_tokens=500_000)
+    cost_zero = read_log(r_zero.json()["id"])["estimated_cost"]
+    cost_absent = read_log(r_absent.json()["id"])["estimated_cost"]
+    expect(
+        cost_zero == Decimal("2.00000000"),
+        f"报 0 时应与旧口径一致（1M × 1 + 0.5M × 2 = 2 元），实际 {cost_zero}",
+    )
+    expect(
+        cost_absent == cost_zero,
+        f"不传与传 0 必须算出同一笔钱：{cost_absent} vs {cost_zero}",
+    )
+
+    # ④ 越界：命中数是输入的子集，超过直接 422（不写库、不硬算）
+    r = ingest(key, input_tokens=100, cache_hit_tokens=101)
+    expect(
+        r.status_code == 422,
+        f"cache_hit_tokens 大于 input_tokens 应返回 422，实际 {r.status_code}：{r.text}",
+    )
+
+    # ⑤ 详情与列表都返回 cache_hit_tokens —— 拿有值的那条验证，字段通了才算数
+    detail = client.get(f"/api/v1/logs/{hit_log_id}", headers=auth(token))
+    expect(detail.status_code == 200, f"详情应返回 200，实际 {detail.status_code}")
+    expect(
+        detail.json().get("cache_hit_tokens") == 600_000,
+        f"详情响应应带 cache_hit_tokens=600000，实际 {detail.json()}",
+    )
+
+    listed = client.get(
+        f"/api/v1/projects/{pid}/logs", headers=auth(token)
+    ).json()["items"]
+    target = next((i for i in listed if i["id"] == hit_log_id), None)
+    expect(target is not None, "列表里找不到刚上报的那条日志")
+    expect(
+        target.get("cache_hit_tokens") == 600_000,
+        f"列表响应应带 cache_hit_tokens=600000，实际 {target}",
+    )
+
+
 def check_timestamp() -> None:
     token = register_and_login("erin")
     key = new_project(token, "时间测试")["api_key"]
@@ -474,6 +565,7 @@ CHECKS = [
     ("上报成功 / 字段落库 / 项目由 Key 推导", check_ingest_basic),
     ("宽进严出：只传必填字段也能上报", check_ingest_minimal),
     ("成本快照：内置价格 / 自建优先 / 未知模型留空 / 改价不动历史", check_cost_rules),
+    ("★ 缓存两档价：命中按第二档 / 双降级一致 / 越界 422", check_cache_pricing),
     ("timestamp：不传取服务端时间、不带时区按 UTC 算", check_timestamp),
     ("★ 认证：缺 Key / 无效 / 吊销 / 过期一律 401", check_auth),
     ("★ 项目隔离：数据只落自己的项目", check_isolation),

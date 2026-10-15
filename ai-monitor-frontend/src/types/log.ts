@@ -4,6 +4,8 @@ export interface LogListItem {
   id: number
   model: string
   input_tokens: number
+  // 输入 Token 中命中缓存的部分（是 input_tokens 的子集）；0 表示没报或没命中
+  cache_hit_tokens: number
   output_tokens: number
   total_tokens: number
   // 耗时，单位毫秒 —— 后端存的也是毫秒，换算成秒只发生在展示时

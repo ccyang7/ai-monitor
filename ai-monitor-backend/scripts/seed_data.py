@@ -113,6 +113,13 @@ def build_record(rng: random.Random, project: Project, priced: Model, days: int)
 
     succeeded = rng.random() >= 0.1
 
+    # 只给一部分成功调用生成缓存命中（真实场景里能否命中取决于前缀是否重复出现过），
+    # 让开发环境同时有「有命中 / 无命中」两种数据可看
+    if succeeded and rng.random() < 0.5:
+        cache_hit_tokens = int(input_tokens * rng.uniform(0.3, 0.8))
+    else:
+        cache_hit_tokens = 0
+
     return LLMRequest(
         project_id=project.id,
         provider=priced.provider,
@@ -120,13 +127,16 @@ def build_record(rng: random.Random, project: Project, priced: Model, days: int)
         input=rng.choice(QUESTIONS),
         output=rng.choice(ANSWERS) if succeeded else None,
         input_tokens=input_tokens,
+        cache_hit_tokens=cache_hit_tokens,
         output_tokens=output_tokens,
         total_tokens=input_tokens + output_tokens,
         latency=latency,
         status="success" if succeeded else "error",
         error_message=None if succeeded else rng.choice(ERRORS),
         # 和上报接口走同一个成本公式，口径必须一致，否则播种数据的成本统计对不上
-        estimated_cost=ingest_service.compute_cost(input_tokens, output_tokens, priced),
+        estimated_cost=ingest_service.compute_cost(
+            input_tokens, cache_hit_tokens, output_tokens, priced
+        ),
         created_at=random_created_at(rng, days),
     )
 

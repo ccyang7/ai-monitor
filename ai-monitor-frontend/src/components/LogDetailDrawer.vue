@@ -110,6 +110,11 @@ watch(
         <div class="metric">
           <div class="metric-name">输入 Token</div>
           <div class="metric-value">{{ formatNumber(detail.input_tokens) }}</div>
+          <!-- 命中为 0 时不显示：没报命中数的老数据展示与以前一模一样 -->
+          <div v-if="detail.cache_hit_tokens > 0" class="metric-note">
+            命中 {{ formatNumber(detail.cache_hit_tokens) }} · 未命中
+            {{ formatNumber(detail.input_tokens - detail.cache_hit_tokens) }}
+          </div>
         </div>
         <div class="metric">
           <div class="metric-name">输出 Token</div>
@@ -247,6 +252,14 @@ watch(
   font-size: var(--fs-lg);
   font-weight: 660;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 缓存命中明细：只在有命中时出现，压到最小字号，不抢主数值的视线 */
+.metric-note {
+  margin-top: 4px;
+  font-size: var(--fs-xs);
+  color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
 

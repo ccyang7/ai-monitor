@@ -33,9 +33,21 @@ def find_priced_model(db: Session, model_name: str, owner_id: int) -> Model | No
     )
 
 
-def compute_cost(input_tokens: int, output_tokens: int, priced: Model) -> Decimal:
+def compute_cost(
+    input_tokens: int, cache_hit_tokens: int, output_tokens: int, priced: Model
+) -> Decimal:
+    # 没配缓存价 → 命中部分按未命中价算，与「没报命中数」殊途同归：
+    # 两条降级路径都退回单档公式，老数据的成本逐分钱不变
+    hit_price = (
+        priced.cache_hit_price
+        if priced.cache_hit_price is not None
+        else priced.input_price
+    )
+    miss_tokens = input_tokens - cache_hit_tokens
+
     cost = (
-        Decimal(input_tokens) / TOKENS_PER_PRICE_UNIT * priced.input_price
+        Decimal(cache_hit_tokens) / TOKENS_PER_PRICE_UNIT * hit_price
+        + Decimal(miss_tokens) / TOKENS_PER_PRICE_UNIT * priced.input_price
         + Decimal(output_tokens) / TOKENS_PER_PRICE_UNIT * priced.output_price
     )
     # 金额四舍五入用 HALF_UP（人熟悉的进位方式），不是 Decimal 默认的 HALF_EVEN
@@ -48,7 +60,9 @@ def estimate_cost(db: Session, payload: LogIngestIn, owner_id: int) -> Decimal |
     priced = find_priced_model(db, payload.model, owner_id)
     if priced is None:
         return None
-    return compute_cost(payload.input_tokens, payload.output_tokens, priced)
+    return compute_cost(
+        payload.input_tokens, payload.cache_hit_tokens, payload.output_tokens, priced
+    )
 
 
 def ingest_log(db: Session, project: Project, payload: LogIngestIn) -> LLMRequest:
@@ -59,6 +73,7 @@ def ingest_log(db: Session, project: Project, payload: LogIngestIn) -> LLMReques
         input=payload.input,
         output=payload.output,
         input_tokens=payload.input_tokens,
+        cache_hit_tokens=payload.cache_hit_tokens,
         output_tokens=payload.output_tokens,
         # 接入方没传 total 时自己补：漏传不该在统计里留下一批 0 token 的调用
         total_tokens=(
