@@ -136,7 +136,8 @@ def list_projects(runtime: ToolRuntime[AssistantContext]) -> dict:
                         _local(last_called, ctx.timezone) if last_called else None
                     ),
                 }
-                for project, last_called in rows
+                # 第三个值是「最近是否有异常」，只给首页卡片用，助手这里不需要
+                for project, last_called, _ in rows
             ]
         }
 
