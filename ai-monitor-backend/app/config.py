@@ -1,5 +1,7 @@
-"""应用配置：从环境变量和 .env 读取，并守卫 JWT 密钥强度。"""
+"""应用配置：按 APP_ENV 加载 .env.development / .env.production，守卫生产环境与 JWT 密钥强度。"""
 
+import os
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator, model_validator
@@ -10,16 +12,25 @@ MIN_JWT_SECRET_BYTES = 32
 
 PLACEHOLDER_SECRETS = {"change_me", "CHANGE_ME_RANDOM_SECRET"}
 
+_APP_ENV = os.environ.get("APP_ENV", "development")
+
+# 下面要拿它拼文件名，先卡白名单：APP_ENV 来自环境变量，不校验的话
+# APP_ENV=../../something 能读到任意文件
+if _APP_ENV not in {"development", "production"}:
+    raise ValueError(f"APP_ENV 只能是 development 或 production，当前是：{_APP_ENV}")
+
 
 class Settings(BaseSettings):
     app_name: str = "AI Monitor API"
+    app_env: Literal["development", "production"] = _APP_ENV
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
 
+    # 这两项刻意不给默认值：代码里放一个「能连上的默认地址」或默认密钥，
+    # 只会让漏配的部署多跑一会儿再出问题，不如启动时直接报缺配置
     # +psycopg 指定 psycopg3 驱动；psycopg2 要写 +psycopg2，两者不通用
-    database_url: str = "postgresql+psycopg://ai_monitor:change_me@localhost:5432/ai_monitor"
-
-    jwt_secret_key: str = "change_me"
+    database_url: str
+    jwt_secret_key: str
     jwt_algorithm: str = "HS256"
 
     access_token_expire_minutes: int = 7 * 24 * 60
@@ -51,8 +62,30 @@ class Settings(BaseSettings):
     # 没有联网能力。与 llm_api_key 同策略，缺配置降级、不阻止启动
     tavily_api_key: str = ""
 
-    # .env 按「启动目录」找，不是按本文件位置 —— 约定从 ai-monitor-backend/ 启动服务
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # 文件名必须在类定义时就确定，而那时还没读过任何 .env 文件，
+    # 所以环境名只能来自操作系统环境变量，不能写在配置文件里
+    # 路径按「启动目录」找，不是按本文件位置 —— 约定从 ai-monitor-backend/ 启动服务
+    model_config = SettingsConfigDict(
+        env_file=f".env.{_APP_ENV}", env_file_encoding="utf-8"
+    )
+
+    @model_validator(mode="after")
+    def _guard_production(self) -> "Settings":
+        # 文件里的 APP_ENV 必须和启动环境一致：复制模板后忘了改，
+        # 或者两份配置文件放反了，都在这里拦下
+        if self.app_env != _APP_ENV:
+            raise ValueError(
+                f"启动环境 APP_ENV={_APP_ENV}，但配置文件里写的是 {self.app_env}"
+            )
+        # 生产误开 DEBUG 会把每条 SQL 和异常细节写进日志；连测试库则会直接污染数据。
+        # 这两种错在启动阶段拦下，比上线后从日志里发现便宜得多
+        if self.app_env != "production":
+            return self
+        if self.debug:
+            raise ValueError("APP_ENV=production 时 DEBUG 必须为 false")
+        if "/ai_monitor_test" in self.database_url:
+            raise ValueError("生产环境不能连 ai_monitor_test 测试库")
+        return self
 
     @model_validator(mode="after")
     def _guard_jwt_secret(self) -> "Settings":
@@ -75,7 +108,8 @@ class Settings(BaseSettings):
             f"JWT_SECRET_KEY 不安全（{reason}）。\n"
             "  它用来签名登录凭证，泄露 = 任何人都能伪造任意用户的 token。\n"
             "  生成一个：python -c \"import secrets; print(secrets.token_urlsafe(48))\"\n"
-            "  然后填进 ai-monitor-backend/.env"
+            "  然后填进 ai-monitor-backend/.env.development"
+            "（生产为项目根目录 .env.production）"
         )
 
         if self.debug:
@@ -106,7 +140,8 @@ class Settings(BaseSettings):
             print(
                 "\n[WARNING] JWT_SECRET_KEY is weak or still a placeholder.\n"
                 "  Generate one: python -c \"import secrets; print(secrets.token_urlsafe(48))\"\n"
-                "  Then put it in ai-monitor-backend/.env\n"
+                "  Then put it in ai-monitor-backend/.env.development"
+                " (production: .env.production)\n"
             )
 
 

@@ -337,7 +337,9 @@ def main() -> int:
     print(f"模型：{settings.llm_model}")
 
     if not settings.llm_api_key:
-        print("\n❌ .env 里没配 LLM_API_KEY，这个脚本必须真实调用模型才能跑。")
+        print(
+            "\n❌ .env.development 里没配 LLM_API_KEY，这个脚本必须真实调用模型才能跑。"
+        )
         return 1
 
     print("真实调用 DeepSeek，一轮提问约十几秒，请耐心等待。\n")

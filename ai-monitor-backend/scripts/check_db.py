@@ -97,7 +97,7 @@ def main() -> int:
         print(f"原始错误：{exc.orig}\n")
         print("按这个顺序排查：")
         print("  1. 虚拟机里的 PostgreSQL 在跑吗？ → sudo systemctl status postgresql")
-        print("  2. .env 里的 DATABASE_URL 填对了吗？（IP / 密码 / 库名）")
+        print("  2. .env.development 里的 DATABASE_URL 填对了吗？（IP / 密码 / 库名）")
         print("  3. 虚拟机允许远程连接吗？ → postgresql.conf 里 listen_addresses = '*'")
         print("  4. 虚拟机允许你这台机器访问吗？ → pg_hba.conf 加一行 host all all 0.0.0.0/0 scram-sha-256")
         print("  5. 虚拟机防火墙放行 5432 端口了吗？")

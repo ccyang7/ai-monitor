@@ -280,7 +280,9 @@ def main() -> int:
     print(f"模型：{settings.llm_model}")
 
     if not settings.llm_api_key:
-        print("\n❌ .env 里没配 LLM_API_KEY，用例 2 必须真实调用模型才能跑。")
+        print(
+            "\n❌ .env.development 里没配 LLM_API_KEY，用例 2 必须真实调用模型才能跑。"
+        )
         return 1
 
     failures: list[str] = []

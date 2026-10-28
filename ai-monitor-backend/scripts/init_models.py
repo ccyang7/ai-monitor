@@ -93,7 +93,10 @@ if __name__ == "__main__":
     try:
         sys.exit(main())
     except OperationalError as exc:
-        print("❌ 连不上数据库，先确认 ai-monitor-backend/.env 里的 DATABASE_URL")
+        print(
+            "❌ 连不上数据库，先确认 DATABASE_URL"
+            "（本地在 ai-monitor-backend/.env.development，生产由 compose 注入）"
+        )
         print(f"   原始错误：{exc.orig}")
         sys.exit(1)
     except ProgrammingError as exc:
