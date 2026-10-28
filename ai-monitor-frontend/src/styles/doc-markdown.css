@@ -1,0 +1,240 @@
+/* Markdown 正文排版。选择器全部限定在 .doc-body 下，因为 v-html 内容不受 scoped 约束。
+   tokens.css 的全局 reset 清了标题/段落边距和列表符号，这里必须逐项恢复。 */
+
+.doc-body {
+  font-size: var(--fs-md);
+  line-height: 1.8;
+  color: var(--text);
+}
+
+.doc-body h1 {
+  margin: 0 0 20px;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+}
+
+.doc-body h2 {
+  margin: 48px 0 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-xl);
+  scroll-margin-top: 88px;
+}
+
+.doc-body h3 {
+  margin: 30px 0 12px;
+  font-size: 17px;
+  scroll-margin-top: 88px;
+}
+
+.doc-body p {
+  margin: 0 0 14px;
+}
+
+.doc-body strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.doc-body a {
+  color: var(--green-600);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.doc-body a:hover {
+  color: var(--green-700);
+}
+
+.doc-body ul,
+.doc-body ol {
+  margin: 12px 0 16px;
+  padding-left: 24px;
+}
+
+.doc-body ul {
+  list-style: disc;
+}
+
+.doc-body ol {
+  list-style: decimal;
+}
+
+.doc-body li {
+  margin: 6px 0;
+}
+
+.doc-body li::marker {
+  color: var(--green-500);
+}
+
+.doc-body li > ul,
+.doc-body li > ol {
+  margin: 6px 0;
+}
+
+.doc-body :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(11, 35, 28, 0.07);
+  color: var(--green-700);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  word-break: break-word;
+}
+
+.doc-body h2 code,
+.doc-body h3 code {
+  font-size: 0.85em;
+}
+
+.doc-body .code-block {
+  margin: 16px 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: var(--green-900);
+}
+
+.doc-body .code-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--green-200);
+}
+
+.doc-body .code-copy {
+  padding: 2px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--green-200);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.doc-body .code-copy:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.doc-body pre {
+  margin: 0;
+  padding: 16px 18px;
+  overflow-x: auto;
+  color: var(--green-100);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.doc-body pre code {
+  padding: 0;
+  background: none;
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: normal;
+}
+
+.doc-body .hljs-keyword,
+.doc-body .hljs-selector-tag,
+.doc-body .hljs-built_in,
+.doc-body .hljs-type {
+  color: var(--green-300);
+}
+
+.doc-body .hljs-string,
+.doc-body .hljs-attr,
+.doc-body .hljs-template-tag {
+  color: var(--green-200);
+}
+
+.doc-body .hljs-number,
+.doc-body .hljs-literal {
+  color: #e8c07a;
+}
+
+.doc-body .hljs-comment,
+.doc-body .hljs-quote {
+  color: rgba(216, 243, 220, 0.45);
+  font-style: italic;
+}
+
+.doc-body .hljs-title,
+.doc-body .hljs-section {
+  color: #95d5b2;
+  font-weight: 600;
+}
+
+.doc-body .hljs-variable,
+.doc-body .hljs-name,
+.doc-body .hljs-selector-id,
+.doc-body .hljs-selector-class {
+  color: var(--green-100);
+}
+
+.doc-body .hljs-meta {
+  color: #8fb9a4;
+}
+
+.doc-body .table-wrap {
+  margin: 16px 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.doc-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.doc-body th,
+.doc-body td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-body th {
+  background: var(--green-50);
+  color: var(--green-700);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.doc-body tr:last-child td {
+  border-bottom: 0;
+}
+
+.doc-body blockquote {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--green-400);
+  border-radius: 0 8px 8px 0;
+  background: var(--green-50);
+}
+
+.doc-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.doc-body hr {
+  margin: 32px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.doc-body img {
+  max-width: 100%;
+  border-radius: 8px;
+}

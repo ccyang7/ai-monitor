@@ -199,6 +199,8 @@ async function submit(): Promise<void> {
             {{ mode === 'login' ? '注册一个' : '去登录' }}
           </button>
         </p>
+
+        <RouterLink class="auth-help-link" to="/docs">第一次使用？阅读帮助文档</RouterLink>
       </div>
     </section>
   </div>
@@ -404,6 +406,19 @@ async function submit(): Promise<void> {
 
 .link-btn:hover {
   color: var(--green-600);
+  text-decoration: underline;
+}
+
+.auth-help-link {
+  display: block;
+  margin-top: 16px;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--green-600);
+}
+
+.auth-help-link:hover {
+  color: var(--green-700);
   text-decoration: underline;
 }
 

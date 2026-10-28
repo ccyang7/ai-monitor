@@ -19,7 +19,8 @@ setUnauthorizedHandler(() => {
   useAuthStore().clear()
   useProjectsStore().reset()
 
-  if (current.name !== 'login') {
+  // 公开页（帮助文档）不该因为一次 401 就被踢去登录
+  if (current.name !== 'login' && current.meta.public !== true) {
     void router.replace({ name: 'login', query: { redirect: current.fullPath } })
   }
 })
