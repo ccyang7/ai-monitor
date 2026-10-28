@@ -6,7 +6,9 @@
       "Bash(curl -s -o /dev/null -w \"frontend %{http_code}\\\\n\" http://127.0.0.1:5173/)",
       "Bash(curl -s -o /dev/null -w \"root %{http_code}\\\\n\" http://127.0.0.1:8001/)",
       "Bash(curl -s -o /dev/null -w \"docs %{http_code}\\\\n\" http://127.0.0.1:8001/docs)",
-      "Bash(curl -s -o /dev/null -w \"openapi %{http_code}\\\\n\" http://127.0.0.1:8001/openapi.json)"
+      "Bash(curl -s -o /dev/null -w \"openapi %{http_code}\\\\n\" http://127.0.0.1:8001/openapi.json)",
+      "mcp__playwrite__browser_evaluate",
+      "mcp__playwrite__browser_find"
     ]
   }
 }
