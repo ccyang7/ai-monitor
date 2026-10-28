@@ -32,6 +32,25 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/ModelsView.vue'),
   },
   {
+    // 入口只在 admin 的侧边栏出现；直接敲 URL 也会被守卫挡回首页
+    path: '/admin/users',
+    name: 'admin-users',
+    component: () => import('@/views/AdminUsersView.vue'),
+    meta: { adminOnly: true },
+  },
+  {
+    path: '/admin/assistant',
+    name: 'admin-assistant',
+    component: () => import('@/views/AdminAssistantView.vue'),
+    meta: { adminOnly: true },
+  },
+  {
+    path: '/admin/models',
+    name: 'admin-models',
+    component: () => import('@/views/AdminModelsView.vue'),
+    meta: { adminOnly: true },
+  },
+  {
     // 项目下的子页，靠 ProjectTabs 互相切换。概览是这个项目的落地页，
     // 侧边栏和首页的项目入口都指向它
     path: '/projects/:projectId',
@@ -112,6 +131,11 @@ router.beforeEach(async (to) => {
 
   if (!auth.isLoggedIn) {
     return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  // 前端防呆，不是安全边界：真正的权限检查在后端 require_admin
+  if (to.meta.adminOnly === true && auth.user?.role !== 'admin') {
+    return { name: 'home' }
   }
 
   return true

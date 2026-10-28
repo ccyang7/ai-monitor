@@ -74,6 +74,47 @@ function logout(): void {
           <span>模型管理</span>
         </RouterLink>
 
+        <template v-if="auth.isAdmin">
+          <div class="nav-label">管理后台</div>
+          <RouterLink
+            class="nav-item"
+            :class="{ 'is-active': route.name === 'admin-users' }"
+            :to="{ name: 'admin-users' }"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="8" r="3.5" />
+              <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+              <path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M19.5 20a6.5 6.5 0 0 0-3-5.5" />
+            </svg>
+            <span>用户</span>
+          </RouterLink>
+          <RouterLink
+            class="nav-item"
+            :class="{ 'is-active': route.name === 'admin-assistant' }"
+            :to="{ name: 'admin-assistant' }"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a8.5 8.5 0 1 1-4.1-7.3L21 4l-1 4.2A8.4 8.4 0 0 1 21 12z" />
+              <path d="M8.5 12h.01M12 12h.01M15.5 12h.01" />
+            </svg>
+            <span>助手用量</span>
+          </RouterLink>
+          <RouterLink
+            class="nav-item"
+            :class="{ 'is-active': route.name === 'admin-models' }"
+            :to="{ name: 'admin-models' }"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l7 3v5.5c0 4.5-3 7.9-7 9.5-4-1.6-7-5-7-9.5V6z" />
+              <path d="M9 12l2 2 4-4" />
+            </svg>
+            <span>模型目录</span>
+          </RouterLink>
+        </template>
+
         <RouterLink class="nav-item" to="/docs">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round">

@@ -23,7 +23,7 @@ _LIST_COLUMNS = (
 )
 
 
-def _escape_like(keyword: str) -> str:
+def escape_like(keyword: str) -> str:
     # 三步的顺序不可交换：反斜杠必须第一个换，否则后两步生成的反斜杠会被再转义一遍，
     # 搜「50%」就变成搜「50\%」—— % 反而重新变回通配符
     return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -51,7 +51,7 @@ def _build_conditions(project: Project, query: LogListQuery) -> list[ColumnEleme
     # 纯空白的搜索词要跳过：ILIKE '%  %' 匹配不到任何东西，却照样全表扫一遍
     keyword = (query.q or "").strip()
     if keyword:
-        pattern = f"%{_escape_like(keyword)}%"
+        pattern = f"%{escape_like(keyword)}%"
         # coalesce 把 NULL 当空串：NULL ILIKE 的结果是 NULL 而非 false，
         # OR 的三值逻辑眼下碰巧给出正确结果，但那是巧合，不是保证
         conditions.append(

@@ -22,6 +22,13 @@ export interface UnpricedModel {
   used_by_projects: string[]
 }
 
+// 管理后台：全平台「有人上报、但没有内置价」的模型
+export interface AdminUnpricedModel {
+  model_name: string
+  call_count: number
+  user_count: number
+}
+
 export interface ModelListOut {
   items: Model[]
   total: number

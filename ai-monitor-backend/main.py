@@ -3,7 +3,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api import anomaly, auth, chat, health, logs, models, projects, stats, users
+from app.api import admin, anomaly, auth, chat, health, logs, models, projects, stats, users
 from app.config import settings
 from app.exceptions import BusinessError
 
@@ -26,6 +26,8 @@ app.include_router(anomaly.router, prefix=settings.api_v1_prefix)
 app.include_router(models.router, prefix=settings.api_v1_prefix)
 # AI 助手是全局面板，路径不带项目：权限边界靠 AssistantContext 里的 user_id
 app.include_router(chat.router, prefix=settings.api_v1_prefix)
+# 管理后台的跨用户能力只从这个前缀进，用户侧路由一行不改
+app.include_router(admin.router, prefix=settings.api_v1_prefix)
 
 
 @app.exception_handler(BusinessError)

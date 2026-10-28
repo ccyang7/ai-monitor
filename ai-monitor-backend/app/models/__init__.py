@@ -3,6 +3,7 @@
 # 全部导入一遍是必须的：SQLAlchemy 靠「类被定义过」注册表映射，
 # relationship 里写的字符串类名要能找到真实类
 from app.models.api_key import ApiKey
+from app.models.assistant_chat import AssistantChat
 from app.models.base import Base, TimestampMixin
 from app.models.llm_request import LLMRequest
 from app.models.model import Model
@@ -12,6 +13,7 @@ from app.models.user import User
 
 __all__ = [
     "ApiKey",
+    "AssistantChat",
     "Base",
     "LLMRequest",
     "Model",

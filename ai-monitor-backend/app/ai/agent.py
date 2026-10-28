@@ -27,6 +27,9 @@ agent = create_agent(
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key or _PLACEHOLDER_KEY,
         temperature=settings.llm_temperature,
+        # 不显式打开的话，非 OpenAI 官方的 base_url 默认不返回 usage，
+        # 流式路径的用量就永远是 0。实测 DeepSeek 支持，每次调用只在最后一片给一次
+        stream_usage=True,
     ),
     tools=ALL_TOOLS,
     middleware=[build_prompt],

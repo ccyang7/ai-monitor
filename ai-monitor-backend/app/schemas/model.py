@@ -71,6 +71,13 @@ class UnpricedModelOut(BaseModel):
     used_by_projects: list[str] = []
 
 
+class AdminUnpricedModelOut(BaseModel):
+    model_name: str
+    # 聚合计数只说「影响面」，不带任何项目名或用户名 —— 管理员的可见范围止于账号信息
+    call_count: int
+    user_count: int
+
+
 class ModelListOut(BaseModel):
     items: list[ModelOut]
     total: int

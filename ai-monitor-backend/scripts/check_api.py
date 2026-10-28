@@ -147,6 +147,10 @@ def check_current_user() -> None:
     expect(r.status_code == 200, f"/users/me 应返回 200，实际 {r.status_code}")
     body = r.json()
     expect(body["username"] == "bob", f"返回的用户不对：{body['username']}")
+    expect(
+        body["role"] == "user",
+        f"新注册用户的角色应是 user（数据库 DEFAULT），实际 {body['role']!r}",
+    )
     expect("password_hash" not in r.text, "/users/me 泄露了 password_hash")
 
 

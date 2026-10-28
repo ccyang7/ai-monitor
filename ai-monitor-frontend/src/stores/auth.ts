@@ -12,6 +12,8 @@ export const useAuthStore = defineStore('auth', () => {
   const restored = ref(false)
 
   const isLoggedIn = computed(() => token.value !== null)
+  // 只是菜单开关：绕过它直接调 /admin 接口，后端照样返回 403
+  const isAdmin = computed(() => user.value?.role === 'admin')
 
   function setToken(value: string): void {
     token.value = value
@@ -56,5 +58,16 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, restored, isLoggedIn, login, register, loadUser, clear, restore }
+  return {
+    token,
+    user,
+    restored,
+    isLoggedIn,
+    isAdmin,
+    login,
+    register,
+    loadUser,
+    clear,
+    restore,
+  }
 })

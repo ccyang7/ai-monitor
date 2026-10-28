@@ -1,9 +1,9 @@
-"""用户表：登录名、密码哈希、可空唯一的邮箱。"""
+"""用户表：登录名、密码哈希、可空唯一的邮箱与角色。"""
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, String
+from sqlalchemy import BigInteger, CheckConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -16,6 +16,11 @@ if TYPE_CHECKING:
 class User(Base, TimestampMixin):
     __tablename__ = "users"
 
+    # CHECK 写在这里只是让模型完整描述表结构，真正生效的是 sql/schema.sql
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'admin')", name="ck_users_role"),
+    )
+
     # 必须显式写 BigInteger：不写会按 Mapped[int] 推断成 INTEGER，
     # 而建表脚本里是 BIGSERIAL，两边类型不一致外键会对不上
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -25,6 +30,8 @@ class User(Base, TimestampMixin):
 
     # 唯一但可空：PG 的 UNIQUE 允许多行 NULL，所以多个不填邮箱的用户不冲突
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
+
+    role: Mapped[str] = mapped_column(String(20), server_default="user")
 
     # passive_deletes：删用户时不逐条删项目，交给数据库的 ON DELETE CASCADE
     projects: Mapped[list["Project"]] = relationship(

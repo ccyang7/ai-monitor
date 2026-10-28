@@ -1,8 +1,8 @@
-"""模型的查询与增删改：可见性过滤（内置 + 自建）、未配价差集、重名校验、禁用。"""
+"""模型的查询与增删改：可见性过滤（内置 + 自建）、管理员的内置目录、未配价差集、重名校验、禁用。"""
 
 from collections import defaultdict
 
-from sqlalchemy import or_, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.exceptions import BusinessError
@@ -32,6 +32,18 @@ def list_models(db: Session, user: User) -> list[tuple[Model, list[str]]]:
     return [(m, usage.get(m.model_name, [])) for m in models]
 
 
+def list_builtin_models(db: Session) -> list[Model]:
+    # 管理员的视角与用户不同：禁用行也要列出来，否则禁用之后页面上再也找不到它、
+    # 无法恢复；也不带 used_by_projects —— 项目名属于用户数据，管理员看不到
+    return list(
+        db.scalars(
+            select(Model)
+            .where(Model.is_builtin.is_(True))
+            .order_by(Model.model_name.asc())
+        )
+    )
+
+
 def list_used_projects(db: Session, user: User, model_name: str) -> list[str]:
     return _used_by_projects(db, user).get(model_name, [])
 
@@ -54,6 +66,34 @@ def list_unpriced_models(db: Session, user: User) -> list[tuple[str, list[str]]]
         for name, projects in sorted(usage.items())
         if name not in visible_names
     ]
+
+
+def list_global_unpriced_models(db: Session) -> list[tuple[str, int, int]]:
+    # 口径与用户侧 list_unpriced_models 一致：与「内置 active 模型名」做差集，
+    # 而不是 estimated_cost IS NULL —— 补价之后老日志的成本照样是 NULL，提示永远消不掉。
+    # 只看内置：用户自建的价格只对他自己生效，别的用户仍然没有价
+    rows = db.execute(
+        select(
+            LLMRequest.model,
+            func.count().label("call_count"),
+            func.count(distinct(Project.owner_id)).label("user_count"),
+        )
+        .join(Project, Project.id == LLMRequest.project_id)
+        .where(
+            ~(
+                select(1)
+                .where(
+                    Model.is_builtin.is_(True),
+                    Model.status == "active",
+                    Model.model_name == LLMRequest.model,
+                )
+                .exists()
+            )
+        )
+        .group_by(LLMRequest.model)
+        .order_by(func.count().desc(), LLMRequest.model.asc())
+    ).all()
+    return [(model, calls, users) for model, calls, users in rows]
 
 
 def _used_by_projects(db: Session, user: User) -> dict[str, list[str]]:
@@ -92,6 +132,24 @@ def create_model(db: Session, user: User, data: ModelCreateIn) -> Model:
     return model
 
 
+def create_builtin_model(db: Session, data: ModelCreateIn) -> Model:
+    _ensure_builtin_name_available(db, data.model_name)
+
+    model = Model(
+        owner_id=None,
+        provider=data.provider,
+        model_name=data.model_name,
+        input_price=data.input_price,
+        output_price=data.output_price,
+        cache_hit_price=data.cache_hit_price,
+        is_builtin=True,
+    )
+    db.add(model)
+    db.commit()
+    db.refresh(model)
+    return model
+
+
 def update_model(db: Session, model: Model, data: ModelUpdateIn) -> Model:
     # exclude_unset 分得清「没传」和「传 null」：cache_hit_price 传 null 是
     # 「清空缓存档」，不是「别动它」
@@ -102,6 +160,33 @@ def update_model(db: Session, model: Model, data: ModelUpdateIn) -> Model:
             db, model.owner_id, changes["model_name"], exclude_id=model.id
         )
 
+    _apply_model_changes(model, changes)
+    db.commit()
+    db.refresh(model)
+    return model
+
+
+def update_builtin_model(db: Session, model: Model, data: ModelUpdateIn) -> Model:
+    changes = data.model_dump(exclude_unset=True)
+
+    if "model_name" in changes:
+        _ensure_builtin_name_available(db, changes["model_name"], exclude_id=model.id)
+
+    _apply_model_changes(model, changes)
+    db.commit()
+    db.refresh(model)
+    return model
+
+
+def delete_builtin_model(db: Session, model: Model) -> None:
+    # 物理删除，不留禁用行。模型目录只是一张价格表，历史成本已经快照在
+    # llm_requests.estimated_cost 里，删掉这行不会改变任何一条历史记录；
+    # 之后再有同名上报会匹配不到价格，落进「未收录模型」等管理员重新收录
+    db.delete(model)
+    db.commit()
+
+
+def _apply_model_changes(model: Model, changes: dict) -> None:
     # 逐字段显式赋值，不用 setattr 循环 —— 理由同 project.py：将来给 UpdateIn 加个
     # 不该改的字段，循环会安静地改掉
     if "provider" in changes:
@@ -114,10 +199,6 @@ def update_model(db: Session, model: Model, data: ModelUpdateIn) -> Model:
         model.output_price = changes["output_price"]
     if "cache_hit_price" in changes:
         model.cache_hit_price = changes["cache_hit_price"]
-
-    db.commit()
-    db.refresh(model)
-    return model
 
 
 def disable_model(db: Session, model: Model) -> None:
@@ -147,3 +228,17 @@ def _ensure_name_available(
     duplicated = db.scalar(select(Model.id).where(*conditions))
     if duplicated:
         raise BusinessError("你已有一个同名模型，请换个名字或直接改它的价格")
+
+
+def _ensure_builtin_name_available(
+    db: Session, model_name: str, exclude_id: int | None = None
+) -> None:
+    # 与 uq_models_builtin_name 的口径严格一致：它不筛 status，这里也不能筛。
+    # 筛了 active 的话，已禁用的同名行会漏过检查，INSERT 撞索引 → 500
+    conditions = [Model.is_builtin.is_(True), Model.model_name == model_name]
+    if exclude_id is not None:
+        conditions.append(Model.id != exclude_id)
+
+    duplicated = db.scalar(select(Model.id).where(*conditions))
+    if duplicated:
+        raise BusinessError("已有同名内置模型，请直接改它的价格")

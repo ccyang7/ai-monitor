@@ -1,4 +1,4 @@
-"""用户隔离的依赖链：从 JWT 取当前用户，验证项目与 API Key 的归属；上报接口走 X-API-Key。"""
+"""用户隔离的依赖链：从 JWT 取当前用户，验证项目、API Key、日志的归属；管理员与上报各走单独入口。"""
 
 from datetime import datetime, timezone
 
@@ -44,6 +44,17 @@ def get_current_user(
     if user is None:
         raise unauthorized
 
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    # 这里用 403 而不是像 get_own_project 那样给 404：管理接口没有「按 ID 枚举」
+    # 的风险，如实告诉前端「权限不够」，调试时不会误以为是路由写错
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
     return user
 
 
@@ -124,6 +135,21 @@ def get_own_model(model: Model = Depends(get_visible_model)) -> Model:
     # 写的语义：只认自建。能走到这里说明可见性已过（内置 或 本人自建），
     # 所以「是自建」就等价于「是本人的」—— 内置模型所有用户共享，改一次影响全平台的成本基准
     if model.is_builtin:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="模型不存在")
+    return model
+
+
+def get_builtin_model(
+    model_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> Model:
+    # 路径里只有 model_id、没有用户维度：必须限定 is_builtin，否则管理员
+    # 能借一个 id 改到任意用户的自建价格
+    model = db.scalar(
+        select(Model).where(Model.id == model_id, Model.is_builtin.is_(True))
+    )
+    if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="模型不存在")
     return model
 
