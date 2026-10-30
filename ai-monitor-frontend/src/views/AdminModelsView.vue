@@ -83,11 +83,13 @@ async function reload(): Promise<void> {
   }
 }
 
-// 价格展示去掉尾随 0：后端是 6 位小数，18 会序列化成 18.0。
-// null 显示「—」—— 与「价格是 0」是两回事
+// 展示固定两位小数；null 显示「—」—— 与「价格是 0」是两回事
 function formatPrice(value: number | null): string {
   if (value === null) return '—'
-  return String(Number(value.toFixed(6)))
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 // 对齐后端 NUMERIC(12,6)：非负数、最多 6 位小数，先在前端挡一道

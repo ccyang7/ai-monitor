@@ -46,12 +46,14 @@ export function formatLatency(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
 }
 
-// 只做展示格式化，不参与任何运算 —— 金额口径以服务端返回的 estimated_cost 为准
+// 只做展示格式化，不参与任何运算 —— 金额口径以服务端返回的 estimated_cost 为准。
+// 不足半分钱但大于 0 的金额四舍五入会变成 ¥0.00，那样就和免费模型分不出来
 export function formatCost(value: number | null): string {
   if (value === null) return '—'
+  if (value > 0 && value < 0.005) return '<¥0.01'
   const amount = value.toLocaleString('zh-CN', {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
+    maximumFractionDigits: 2,
   })
   return `¥${amount}`
 }

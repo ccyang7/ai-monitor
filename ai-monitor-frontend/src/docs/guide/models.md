@@ -31,18 +31,18 @@
 
 | provider | 模型名 | 输入 | 输出 | 缓存命中 |
 | --- | --- | --- | --- | --- |
-| deepseek | `deepseek-chat` | 1 | 2 | — |
-| deepseek | `deepseek-reasoner` | 4 | 16 | — |
-| deepseek | `deepseek-v4-flash` | 1 | 2 | 0.02 |
-| openai | `gpt-4o` | 18 | 72 | 9 |
-| openai | `gpt-4o-mini` | 1.1 | 4.4 | 0.55 |
-| siliconflow | `BAAI/bge-m3` | 0 | 0 | — |
+| deepseek | `deepseek-chat` | 1.00 | 2.00 | — |
+| deepseek | `deepseek-reasoner` | 4.00 | 16.00 | — |
+| deepseek | `deepseek-v4-flash` | 1.00 | 2.00 | 0.02 |
+| openai | `gpt-4o` | 18.00 | 72.00 | 9.00 |
+| openai | `gpt-4o-mini` | 1.10 | 4.40 | 0.55 |
+| siliconflow | `BAAI/bge-m3` | 0.00 | 0.00 | — |
 
 > 以模型管理页显示的实际价格为准。本表为初始化脚本写入的参考价，厂商调价后平台可能已更新。
 
 **「缓存命中」列的「—」表示该模型没有缓存价**：命中部分按输入价计算。与「缓存价为 0」含义不同。
 
-> ⚠️ **`BAAI/bge-m3` 的两个 0 为真实价格**：该模型在硅基流动上免费，且嵌入调用没有 output token。
+> ⚠️ **`BAAI/bge-m3` 的两个 0.00 为真实价格**：该模型在硅基流动上免费，且嵌入调用没有 output token。
 >
 > 该模型的成本显示为 `¥0.00`，与模型名未收录时显示的「—」含义不同。
 

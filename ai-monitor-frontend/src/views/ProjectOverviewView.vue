@@ -126,8 +126,11 @@ const tokenValues = computed(() => tokens.value?.series.map((point) => point.tot
 const costLabels = computed(() => costs.value?.series.map((point) => point.date) ?? [])
 const costValues = computed(() => costs.value?.series.map((point) => point.cost) ?? [])
 
-// 轴的缩写得带货币符号：光看「20」分不清是 20 元还是 20 次调用
-const costAxis = (value: number) => `¥${formatCompact(value)}`
+// 轴的缩写得带货币符号：光看「20」分不清是 20 元还是 20 次调用。
+// 上千就走缩写（¥9,999.99 这类标签会撑出左边距），千以下用 formatCost
+// 保留两位小数 —— formatCompact 会给小金额带出 3 位小数
+const costAxis = (value: number) =>
+  value >= 1_000 ? `¥${formatCompact(value)}` : formatCost(value)
 
 const seriesHint = computed(() =>
   granularity.value === 'hour'

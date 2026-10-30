@@ -79,7 +79,10 @@ async function reload(): Promise<void> {
 // null 显示「—」—— 与「价格是 0」是两回事（同 estimated_cost 的 null/0 之分）
 function formatPrice(value: number | null): string {
   if (value === null) return '—'
-  return String(Number(value.toFixed(6)))
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 // 对齐后端 NUMERIC(12,6) 的口径：非负数、最多 6 位小数。
