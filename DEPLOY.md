@@ -1,6 +1,6 @@
 # 部署文档：腾讯云 2 核 2G · Docker Compose
 
-本文目标：把 AI Monitor 部署到一台 2 核 2G 的腾讯云服务器，用 `http://公网IP` 直接访问。
+本文目标：把 AI Monitor 部署到一台 2 核 2G 的腾讯云服务器，用 `http://公网IP:18001` 直接访问。
 假设系统为 **Ubuntu 24.04 LTS**（Debian 12 同样适用）。
 
 > 为什么用 Docker Compose：PostgreSQL、后端、Nginx 各一个容器，版本和配置都写进文件里，
@@ -12,7 +12,7 @@
 
 ```text
 浏览器 / 接入方
-      │  80 端口（唯一对外端口）
+      │  18001 端口（唯一对外端口）
       ▼
 ┌─────────────────────────────────────────────┐
 │ Nginx 容器                                   │
@@ -31,7 +31,7 @@
 └─────────────────────────────────────────────┘
 ```
 
-- 对外只开放 **80**。PostgreSQL（5432）和后端（8001）都不映射到宿主机。
+- 对外只开放 **18001**（映射到 nginx 容器的 80）。PostgreSQL（5432）和后端（8001）都不映射到宿主机。
 - 前端和后端同源，所以不需要配 CORS；前端代码里的 `/api/v1` 原样可用。
 - 2G 内存的预算大致是：系统 + Docker 约 250MB，PostgreSQL 约 150MB，
   后端（含 LangChain）约 300–400MB，Nginx 约 15MB，合计 **不到 1G**。
@@ -62,14 +62,14 @@
 | 端口 | 来源 | 用途 |
 |---|---|---|
 | 22 | 你的公网 IP（尽量别用 0.0.0.0/0） | SSH |
-| 80 | 0.0.0.0/0 | 网站与上报接口 |
+| 18001 | 0.0.0.0/0 | 网站与上报接口 |
 
 **不要**放通 5432 和 8001。数据库只给容器访问，后端只给 Nginx 访问。
 
 轻量应用服务器在「防火墙」面板配置；CVM 在「安全组」配置。
 
-> 如果买的是「宝塔面板」之类的应用镜像，系统里可能已经装了 Nginx 占着 80 端口。
-> 先在宝塔面板或 `systemctl` 里停掉它，否则后面容器会报 `address already in use`。
+> 本项目对外映射 18001 端口，不会和宝塔自带的 80 端口冲突；但如果宿主机上已有服务
+> 占用 18001，容器会报 `address already in use`，需要先停掉它或换一个映射端口。
 > 最省事的是直接选纯净的 Ubuntu 系统镜像。
 
 配完再在服务器上确认：
@@ -82,7 +82,7 @@ sudo ufw status
 
 ```bash
 sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
+sudo ufw allow 18001/tcp
 sudo ufw enable
 ```
 
@@ -412,11 +412,11 @@ cd /opt/ai-monitor
 
 ```bash
 # 1. 服务器本机
-curl http://127.0.0.1/health
+curl http://127.0.0.1:18001/health
 # 期望：{"status":"ok"}
 
 # 2. 公网（在你自己的电脑上执行）
-curl http://<公网IP>/health
+curl http://<公网IP>:18001/health
 # 同样期望 {"status":"ok"}
 
 # 3. 容器状态
@@ -427,7 +427,7 @@ free -h
 docker stats --no-stream
 ```
 
-浏览器打开 `http://<公网IP>`：
+浏览器打开 `http://<公网IP>:18001`：
 
 1. 能打开登录页，刷新一次页面不出现 404（验证 `try_files` 生效）。
 2. 注册账号 → 登录成功。
@@ -441,11 +441,11 @@ docker stats --no-stream
 
 ## 6. 接入方怎么上报（地址变了）
 
-部署后接入地址是 `http://<公网IP>/api/v1/logs`，**不再带 `:8001`**。
+部署后接入地址是 `http://<公网IP>:18001/api/v1/logs`，**端口用 Nginx 的 18001，不再带后端的 `:8001`**。
 Nginx 会把 `/api/` 转给后端容器。
 
 ```bash
-curl -X POST http://<公网IP>/api/v1/logs \
+curl -X POST http://<公网IP>:18001/api/v1/logs \
   -H "X-API-Key: proj_你的Key" \
   -H "Content-Type: application/json" \
   -d '{
@@ -558,7 +558,7 @@ df -h
 
 ## 8. 安全要点
 
-1. **只开 80**（以及 SSH）。数据库和后端端口不映射到宿主机。
+1. **只开 18001**（以及 SSH）。数据库和后端端口不映射到宿主机。
 2. `.env.production` 权限 600；不要把密钥提交进 Git。
 3. PostgreSQL 密码、JWT 密钥都用随机值，别用 `123456` 或占位符。
 4. SSH 尽量用密钥登录，安全组里的 22 端口限制来源 IP。
@@ -590,24 +590,24 @@ df -h
 | AI 助手答案不逐字出现 | SSE 被代理缓冲 | 已配 `proxy_buffering off`；若自己改了 Nginx，别删这几行 |
 | 登录后提示数据库错误 | 容器内连接串主机名写错 | compose 里必须是 `postgres`，不是 `localhost` |
 | 建表时报 `permission denied` | 用错了执行用户 | 必须 `psql -U ai_monitor -d ai_monitor` |
-| 公网打不开，服务器本机 `curl` 正常 | 安全组 / 防火墙没放通 80 | 检查腾讯云防火墙与 `ufw status` |
-| `bind: address already in use` | 宿主机已有 Nginx / 宝塔占用 80 | 停掉它，或改用纯净系统镜像 |
+| 公网打不开，服务器本机 `curl` 正常 | 安全组 / 防火墙没放通 18001 | 检查腾讯云防火墙与 `ufw status` |
+| `bind: address already in use` | 宿主机已有服务占用 18001 | 停掉它或换一个映射端口 |
 | 内存告警 / 容器被杀 | 2G 不够用 | 看 `docker stats`；加 swap 只救急，长期上 4G |
 
-排查顺序固定：`./deploy/compose.sh ps` → `./deploy/compose.sh logs <服务>` → `curl 127.0.0.1/health` → 公网 curl。
+排查顺序固定：`./deploy/compose.sh ps` → `./deploy/compose.sh logs <服务>` → `curl 127.0.0.1:18001/health` → 公网 curl。
 
 ---
 
 ## 10. 后续：换成域名 + HTTPS
 
-国内服务器用域名走 80/443，需要域名完成 **ICP 备案**并解析到这台机器。
+国内服务器用域名对外访问，需要域名完成 **ICP 备案**并解析到这台机器。
 
 步骤概览（现在不用做）：
 
 1. 域名 A 记录指向公网 IP。
 2. 用 Certbot（或 Caddy）申请 Let's Encrypt 证书。
-3. Nginx 增加 `listen 443 ssl`，80 端口 301 跳到 443。
-4. 安全组放通 443。
+3. Nginx 增加 `listen 443 ssl`，18001（容器内 80）301 跳到 443；同时在 compose 里给 nginx 增加 `"443:443"` 映射。
+4. 安全组放通 443（18001 可继续保留，作为跳转入口）。
 
 注意：如果以后在前面加了 CDN，要确认 CDN 不会缓冲 SSE（`/api/v1/chat/stream`），
 否则 AI 助手会退回「整段出现」的表现。
